@@ -20,7 +20,8 @@ describe Locomotive::Mounter::Models::ContentSelectOption do
 
     it 'sets a localized attribute' do
       option = build_option(name: 'Hello world')
-      option.localized_field?(:name).should be_true
+
+      expect(option.localized_field?(:name)).to be true
       option.name.should == 'Hello world'
       Locomotive::Mounter.with_locale(:fr) { option.name.should be_nil }
 

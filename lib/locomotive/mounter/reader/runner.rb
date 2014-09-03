@@ -1,7 +1,6 @@
 module Locomotive
   module Mounter
     module Reader
-
       class Runner
 
         attr_accessor :kind, :parameters, :mounting_point
@@ -81,9 +80,7 @@ module Locomotive
             end
           end
         end
-
-      end
-
-    end
-  end
-end
+      end # Runner
+    end # Reader
+  end # Mounter
+end # Locomotive

@@ -18,12 +18,14 @@ describe Locomotive::Mounter::Writer::Api::ThemeAssetsWriter do
 
       it 'returns false if same file' do
         writer.checksums[theme_asset._id] = 'edb293028f9c07f2d692d066cd8a458a'
-        writer.send(:theme_asset_changed?, theme_asset).should be_false
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be false
       end
 
       it 'returns true if different file' do
         writer.checksums[theme_asset._id] = 42
-        writer.send(:theme_asset_changed?, theme_asset).should be_true
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be true
       end
 
     end
@@ -35,12 +37,14 @@ describe Locomotive::Mounter::Writer::Api::ThemeAssetsWriter do
 
       it 'returns false if same file' do
         writer.checksums[theme_asset._id] = 'd05d02ecb331afbe373db79b0a88ef36'
-        writer.send(:theme_asset_changed?, theme_asset).should be_false
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be false
       end
 
       it 'returns true if different file' do
         writer.checksums[theme_asset._id] = 42
-        writer.send(:theme_asset_changed?, theme_asset).should be_true
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be true
       end
 
     end
@@ -52,12 +56,14 @@ describe Locomotive::Mounter::Writer::Api::ThemeAssetsWriter do
 
       it 'returns false if same file' do
         writer.checksums[theme_asset._id] = 'dafcc4a2f059c53e47bf8d7ea4dd1e11'
-        writer.send(:theme_asset_changed?, theme_asset).should be_false
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be false
       end
 
       it 'returns true if different file' do
         writer.checksums[theme_asset._id] = 42
-        writer.send(:theme_asset_changed?, theme_asset).should be_true
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be true
       end
 
     end
@@ -69,12 +75,14 @@ describe Locomotive::Mounter::Writer::Api::ThemeAssetsWriter do
 
       it 'returns false if same file' do
         writer.checksums[theme_asset._id] = '6535b5a8a298e6ae9cacb0737943bee2'
-        writer.send(:theme_asset_changed?, theme_asset).should be_false
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be false
       end
 
       it 'returns true if different file' do
         writer.checksums[theme_asset._id] = 42
-        writer.send(:theme_asset_changed?, theme_asset).should be_true
+
+        expect(writer.send(:theme_asset_changed?, theme_asset)).to be true
       end
 
     end

@@ -27,11 +27,11 @@ describe Locomotive::Mounter::Models::ContentField do
     end
 
     it 'has a default value for required (false)' do
-      build_content_field.required.should be_false
+      expect(build_content_field.required).to be false
     end
 
     it 'has a default value for localized (false)' do
-      build_content_field.localized.should be_false
+      expect(build_content_field.localized).to be false
     end
 
     it 'has a type which always a symbol' do

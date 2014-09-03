@@ -13,7 +13,7 @@ describe Locomotive::Mounter::Writer::Api, :vcr do
     describe 'site' do
 
       it 'has been created' do
-        Locomotive::Mounter::EngineApi.get('/current_site.json').success?.should be_true
+        expect(Locomotive::Mounter::EngineApi.get('/current_site.json').success?).to be true
       end
 
     end

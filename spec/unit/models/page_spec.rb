@@ -19,12 +19,13 @@ describe Locomotive::Mounter::Models::Page do
     end
 
     it 'sets a more complex attribute' do
-      build_page(published: true).published.should be_true
+      expect(build_page(published: true).published).to be true
     end
 
     it 'sets a localized attribute' do
       page = build_page(title: 'Hello world')
-      page.localized_field?(:title).should be_true
+
+      expect(page.localized_field?(:title)).to be true
       page.title.should eq 'Hello world'
       Locomotive::Mounter.with_locale(:fr) { page.title.should be_nil }
 
@@ -112,21 +113,24 @@ describe Locomotive::Mounter::Models::Page do
 
     it 'is a layout if it includes the extends keyword' do
       page = build_page(raw_template: 'Lorem ipsum')
-      page.is_layout?.should be_true
+
+      expect(page.is_layout?).to be true
     end
 
     it 'is not a layout because it does not include the extends keyword' do
       page = build_page(raw_template: "   \n\t{% extends index %} Lorem ipsum")
-      page.is_layout?.should be_false
+
+      expect(page.is_layout?).to be false
     end
 
     it 'is not a layout if the template is nil' do
-      build_page.is_layout?.should be_false
+      expect(build_page.is_layout?).to be false
     end
 
     it 'is not a layout if the template is empty' do
       template = Locomotive::Mounter::Utils::YAMLFrontMattersTemplate.new(File.join(File.dirname(__FILE__), '../..', 'fixtures', 'empty.liquid.haml'))
-      build_page(template: template).is_layout?.should be_false
+
+      expect(build_page(template: template).is_layout?).to be false
     end
 
     it 'returns the fullpath to the layout' do

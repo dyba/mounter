@@ -48,7 +48,7 @@ describe Locomotive::Mounter::Models::ContentEntry do
 
     it 'returns false if it is not a dynamic field' do
       content_type.stub(:find_field).with(:text).and_return(nil)
-      content_entry.is_dynamic_field?(:text).should be_false
+      expect(content_entry.is_dynamic_field?(:text)).to be false
     end
 
     it 'returns true if it is a dynamic field' do
@@ -159,12 +159,12 @@ describe Locomotive::Mounter::Models::ContentEntry do
       describe '.valid?' do
 
         it 'returns false if the required fields are empty' do
-          content_entry.valid?.should be_false
+          expect(content_entry.valid?).to be false
         end
 
         it 'returns true if the required fields are present' do
           content_entry.text = 'Hello world'
-          content_entry.valid?.should be_true
+          expect(content_entry.valid?).to be true
         end
 
       end

@@ -40,20 +40,20 @@ describe 'Locomotive::Mounter::Reader::FileSystem::PagesReader' do
 
     %w(index 404).each do |page|
       it "returns false for the '#{page}'" do
-        @reader.send(:is_subpage_of?, page, 'index').should be_false
+        expect(@reader.send(:is_subpage_of?, page, 'index')).to be false
       end
     end
 
     it 'returns true for pages under index' do
-      @reader.send(:is_subpage_of?, 'about_us', 'index').should be_true
+      expect(@reader.send(:is_subpage_of?, 'about_us', 'index')).to be true
     end
 
     it "returns true for pages under 'about_us'" do
-      @reader.send(:is_subpage_of?, 'about_us/my_team', 'about_us').should be_true
+      expect(@reader.send(:is_subpage_of?, 'about_us/my_team', 'about_us')).to be true
     end
 
     it "returns true for pages under 'about-us'" do
-      @reader.send(:is_subpage_of?, 'about-us/my_team', 'about_us').should be_true
+      expect(@reader.send(:is_subpage_of?, 'about-us/my_team', 'about_us')).to be true
     end
 
   end

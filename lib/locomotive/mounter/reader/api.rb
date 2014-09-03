@@ -2,6 +2,8 @@ module Locomotive
   module Mounter
     module Reader
       module Api
+        module Readable
+        end
 
         # Build a singleton instance of the Runner class.
         #
@@ -668,6 +670,7 @@ module Locomotive
           end
 
           protected
+
           def safe_attributes
             %w[_id key values created_at updated_at]
           end
