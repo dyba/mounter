@@ -5,3 +5,11 @@
 .DS_Store
 /spec/fixtures/default/deploy.yml
 pkg
+
+# Ignore editor-generated files
+*.swp
+
+# Ignore bundler configuration
+.bundle
+.gems
+.rbenv-gemsets

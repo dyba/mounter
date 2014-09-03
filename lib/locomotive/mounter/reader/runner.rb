@@ -10,9 +10,9 @@ module Locomotive
           self.kind = kind
 
            # avoid to load all the ruby files at the startup, only when we need it
-           base_dir = File.join(File.dirname(__FILE__), kind.to_s)
-           require File.join(base_dir, 'base.rb')
-           Dir[File.join(base_dir, '*.rb')].each { |lib| require lib }
+           # base_dir = File.join(File.dirname(__FILE__), kind.to_s)
+           # require File.join(base_dir, 'base.rb') # This is a hinderance right now
+           # Dir[File.join(base_dir, '*.rb')].each { |lib| require lib } # So is this
         end
 
         # Read the content of a site (pages, snippets, ...etc) and create the corresponding mounting point.
