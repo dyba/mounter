@@ -1104,6 +1104,14 @@ module Locomotive
         #
         #
         class TranslationsReader
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
 
           # Build the list of translations based on the config/translations.yml file
           #
@@ -1126,15 +1134,6 @@ module Locomotive
                 end
               end
             end
-          end
-
-          attr_accessor :runner, :items
-
-          delegate :default_locale, :locales, to: :mounting_point
-
-          def initialize(runner)
-            self.runner  = runner
-            self.items   = {}
           end
 
           def mounting_point

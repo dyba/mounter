@@ -2,9 +2,7 @@ require 'uri'
 
 module Locomotive
   module Mounter
-
     class EngineApi
-
       include HTTMultiParty
 
       format :json
@@ -57,8 +55,6 @@ module Locomotive
           {}
         end
       end
-
-    end
-
-  end
-end
+    end # EngineApi
+  end # Mounter
+end # Locomotive

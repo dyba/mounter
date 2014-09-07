@@ -1,15 +1,17 @@
 require 'spec_helper'
 
-RSpec.describe Locomotive::Mounter::Reader::Api::TranslationsReader do
-  # let(:source_path)     { File.join(File.dirname(__FILE__), '..', '..', 'fixtures', 'default') }
-  # let(:mounting_point)  { Locomotive::Mounter::Reader::FileSystem.instance.run!(path: source_path) }
+RSpec.describe Locomotive::Mounter::Reader::FileSystem::TranslationsReader do
+  let(:runner) { Locomotive::Mounter::Reader::FileSystem::Runner.new(:file_system) }
+  let(:path) { File.expand_path(File.join(File.dirname(__FILE__), '..', '..', 'fixtures', 'default')) }
 
-  # subject { Locomotive::Mounter::Reader::Api::TranslationsReader.new(mounting_point) }
+  subject { Locomotive::Mounter::Reader::FileSystem::TranslationsReader.new(runner) }
 
-  # before(:each) do
-  # end
+  it "reads all translations" do
+    runner.path = path
 
-  # it "reads all translations" do
-  #   expect(subject.read).to be false
-  # end
+    translations = { "en" => "Powered by", "fr" => "Propulsé par" }
+    data = subject.read
+
+    expect(data["powered_by"].values).to eq translations
+  end
 end

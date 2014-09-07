@@ -2,9 +2,7 @@ module Locomotive
   module Mounter
     module Writer
       module Api
-
         class SiteWriter < Base
-
           attr_accessor :remote_site
 
           # Check if the site has to be created before.
@@ -29,6 +27,10 @@ module Locomotive
 
           protected
 
+          #=============================================================================
+          # API CLIENT RESPONSIBILITY
+          #=============================================================================
+          #
           # Create the current site in all the locales
           #
           def create_site
@@ -50,6 +52,10 @@ module Locomotive
             self.update_site(true)
           end
 
+          #=============================================================================
+          # API CLIENT RESPONSIBILITY
+          #=============================================================================
+          #
           # Update the current site in all the locales
           #
           # @param [ Boolean ] exclude_current_locale Update the site for all the locales other than the default one.
@@ -116,9 +122,7 @@ module Locomotive
           def has_admin_rights?
             self.get(:my_account, nil, true)['admin']
           end
-
         end
-
       end
     end
   end
