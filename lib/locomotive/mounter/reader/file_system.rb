@@ -1,3 +1,5 @@
+require 'singleton'
+
 module Locomotive
   module Mounter
     module Reader
@@ -97,6 +99,56 @@ module Locomotive
                 self.mounting_point.path = self.path
               end
             end
+          end
+        end
+
+        class Reader
+          include Singleton
+
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          end
+
+          def for_site(runner)
+            path = runner.path
+            config_path = File.join(path, 'config', 'site.yml')
+
+            site = read_yaml(config_path)
+
+            # set the default locale first
+            Locomotive::Mounter.locale = site['locales'].first.to_sym rescue Locomotive::Mounter.locale
+
+            Locomotive::Mounter::Models::Site.new(site).tap do |_site|
+             # set the time zone for the next Time operations (UTC by default)
+             Time.zone = ActiveSupport::TimeZone.new(_site.timezone || 'UTC')
+            end
+          end
+
+          def for_translations(runner)
+            path = runner.path
+            config_path = File.join(path, 'config', 'translations.yml')
+
+            {}.tap do |translations|
+              if File.exists?(config_path)
+                yaml = read_yaml(config_path) || []
+                yaml.each do |translation|
+                  key, values = translation
+
+                  entry = Locomotive::Mounter::Models::Translation.new({
+                    key:    key,
+                    values: values
+                  })
+
+                  translations[key] = entry
+                end
+              end
+            end
+          end
+        end
+
+        module Readable
+          def read
+            accept(Reader.instance)
           end
         end
 
@@ -751,71 +803,16 @@ module Locomotive
         end # PagesReader
 
         class SiteReader
-          def read
-            path = self.runner.path
-            config_path = File.join(path, 'config', 'site.yml')
+          include Readable
 
-            site = self.read_yaml(config_path)
-
-            # set the default locale first
-            Locomotive::Mounter.locale = site['locales'].first.to_sym rescue Locomotive::Mounter.locale
-
-            Locomotive::Mounter::Models::Site.new(site).tap do |_site|
-             # set the time zone for the next Time operations (UTC by default)
-             Time.zone = ActiveSupport::TimeZone.new(_site.timezone || 'UTC')
-            end
-          end
-
-          attr_accessor :runner, :items
-
-          delegate :default_locale, :locales, to: :mounting_point
+          attr_accessor :runner
 
           def initialize(runner)
             self.runner  = runner
-            self.items   = {}
           end
 
-          def mounting_point
-            self.runner.mounting_point
-          end
-
-          protected
-
-          # Return the locale of a file based on its extension.
-          #
-          # Ex:
-          #   about_us/john_doe.fr.liquid.haml => 'fr'
-          #   about_us/john_doe.liquid.haml => 'en' (default locale)
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
-          #
-          def filepath_locale(filepath)
-            locale = File.basename(filepath).split('.')[1]
-
-            if locale.nil?
-              # no locale, use the default one
-              self.default_locale
-            elsif self.locales.include?(locale)
-              # the locale is registered
-              locale
-            elsif locale.size == 2
-              # unregistered locale
-              nil
-            else
-              self.default_locale
-            end
-          end
-
-          # Open a YAML file and returns the content of the file
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] The content of the file
-          #
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          def accept(ask)
+            ask.for_site(@runner)
           end
         end # SiteReader
 
@@ -1099,43 +1096,6 @@ module Locomotive
             self.list.send(name.to_sym, *args, &block)
           end
         end # ThemeAssetsArray
-
-        require 'singleton'
-
-        class Reader
-          include Singleton
-
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
-          end
-
-          def for_translations(runner)
-            path = runner.path
-            config_path = File.join(path, 'config', 'translations.yml')
-
-            {}.tap do |translations|
-              if File.exists?(config_path)
-                yaml = read_yaml(config_path) || []
-                yaml.each do |translation|
-                  key, values = translation
-
-                  entry = Locomotive::Mounter::Models::Translation.new({
-                    key:    key,
-                    values: values
-                  })
-
-                  translations[key] = entry
-                end
-              end
-            end
-          end
-        end
-
-        module Readable
-          def read
-            accept(Reader.instance)
-          end
-        end
 
         # TranslationsReader
         #
