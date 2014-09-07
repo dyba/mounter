@@ -2,9 +2,6 @@ module Locomotive
   module Mounter
     module Reader
       module Api
-        module Readable
-        end
-
         # Build a singleton instance of the Runner class.
         #
         # @return [ Object ] A singleton instance of the Runner class
@@ -60,8 +57,10 @@ module Locomotive
 
         end
 
-        class Base
-
+        # ContentAssetsReader
+        #
+        #
+        class ContentAssetsReader
           include Locomotive::Mounter::Utils::Output
 
           attr_accessor :runner, :items
@@ -78,17 +77,17 @@ module Locomotive
             self.runner.mounting_point
           end
 
-          def read
-            self.output_title(:pulling)
-          end
-
           def get(resource_name, locale = nil, raw = false)
             params = { query: {} }
 
+            # Why do we worry about the locale here?
             params[:query][:locale] = locale if locale
 
             response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
 
+            # Formatting responsibilities
+            #
+            # TODO: delegate to another class to handle formatting
             return response if raw
 
             case response
@@ -125,16 +124,13 @@ module Locomotive
 
             asset.local_filepath
           end
-        end # Base
-
-        class ContentAssetsReader < Base
 
           # Build the list of content assets from the public folder with eager loading.
           #
           # @return [ Array ] The cached list of theme assets
           #
           def read
-            super
+            self.output_title(:pulling)
 
             self.get(:content_assets).each do |attributes|
               url = attributes.delete('url')
@@ -156,13 +152,66 @@ module Locomotive
 
         end # ContentAssetsReader
 
-        class ContentEntriesReader < Base
+        # ContentEntriesReader
+        #
+        #
+        class ContentEntriesReader
+          include Locomotive::Mounter::Utils::Output
 
+          attr_accessor :runner, :items
           attr_accessor :ids, :relationships
 
+          delegate :uri, :uri_with_scheme, :base_uri_with_scheme, to: :runner
+          delegate :locales, to: :mounting_point
+
           def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
             self.ids, self.relationships = {}, []
-            super
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            # Why do we worry about the locale here?
+            params[:query][:locale] = locale if locale
+
+            response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
+
+            # Formatting responsibilities
+            #
+            # TODO: delegate to another class to handle formatting
+            return response if raw
+
+            case response
+            when Hash then response.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              response.map do |row|
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              response
+            end
+          end
+
+          def add_content_asset(url, folder = nil)
+            content_assets = self.mounting_point.resources[:content_assets]
+
+            if (url =~ /^https?:\/\//).nil?
+              url = URI.join(self.uri_with_scheme, url)
+            else
+              url = URI(url)
+            end
+
+            asset = Locomotive::Mounter::Models::ContentAsset.new(uri: url, folder: folder)
+
+            content_assets[url.path] = asset
+
+            asset.local_filepath
           end
 
           # Build the list of content types from the folder on the file system.
@@ -170,7 +219,7 @@ module Locomotive
           # @return [ Array ] The un-ordered list of content types
           #
           def read
-            super
+            self.output_title(:pulling)
 
             self.fetch
 
@@ -289,14 +338,49 @@ module Locomotive
 
         end # ContentEntriesReader
 
-        class ContentTypesReader < Base
+        class ContentTypesReader
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :runner, :items
+
+          delegate :uri, :uri_with_scheme, :base_uri_with_scheme, to: :runner
+          delegate :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
+
+            return response if raw
+
+            case response
+            when Hash then response.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              response.map do |row|
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              response
+            end
+          end
 
           # Build the list of content types from the folder in the file system.
           #
           # @return [ Array ] The un-ordered list of content types
           #
           def read
-            super
+            self.output_title(:pulling)
 
             self.fetch
 
@@ -356,21 +440,76 @@ module Locomotive
 
         end # ContentTypesReader
 
-        class PagesReader < Base
+        class PagesReader
+          include Locomotive::Mounter::Utils::Output
 
+          attr_accessor :runner, :items
           attr_accessor :pages
+
+          delegate :uri, :uri_with_scheme, :base_uri_with_scheme, to: :runner
+          delegate :locales, to: :mounting_point
 
           def initialize(runner)
             self.pages = {}
-            super
+            self.runner  = runner
+            self.items   = {}
           end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
+
+            return response if raw
+
+            case response
+            when Hash then response.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              response.map do |row|
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              response
+            end
+          end
+
+          # Build a new content asset from an url and a folder and add it
+          # to the global list of the content assets.
+          #
+          # @param [ String ] url The url of the content asset.
+          # @param [ String ] folder The folder of the content asset (optional).
+          #
+          # @return [ String ] The local path (not absolute) of the content asset.
+          #
+          def add_content_asset(url, folder = nil)
+            content_assets = self.mounting_point.resources[:content_assets]
+
+            if (url =~ /^https?:\/\//).nil?
+              url = URI.join(self.uri_with_scheme, url)
+            else
+              url = URI(url)
+            end
+
+            asset = Locomotive::Mounter::Models::ContentAsset.new(uri: url, folder: folder)
+
+            content_assets[url.path] = asset
+
+            asset.local_filepath
+          end
+
 
           # Build the tree of pages based on the filesystem structure
           #
           # @return [ Hash ] The pages organized as a Hash (using the fullpath as the key)
           #
           def read
-            super
+            self.output_title(:pulling)
 
             self.fetch
 
@@ -539,10 +678,45 @@ module Locomotive
 
         end # PagesReader
 
-        class SiteReader < Base
+        class SiteReader
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :runner, :items
+
+          delegate :uri, :uri_with_scheme, :base_uri_with_scheme, to: :runner
+          delegate :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
+
+            return response if raw
+
+            case response
+            when Hash then response.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              response.map do |row|
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              response
+            end
+          end
 
           def read
-            super
+            self.output_title(:pulling)
 
             # get the site from the API
             site = self.get(:current_site)
@@ -572,14 +746,52 @@ module Locomotive
 
         end # SiteReader
 
-        class SnippetsReader < Base
+        # SnippetsReader
+        #
+        #
+        class SnippetsReader
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :runner, :items
+
+          delegate :uri, :uri_with_scheme, :base_uri_with_scheme, to: :runner
+          delegate :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
+
+            return response if raw
+
+            case response
+            when Hash then response.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              response.map do |row|
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              response
+            end
+          end
 
           # Build the list of snippets from the folder on the file system.
           #
           # @return [ Array ] The un-ordered list of snippets
           #
           def read
-            super
+            self.output_title(:pulling)
 
             self.fetch
 
@@ -624,11 +836,44 @@ module Locomotive
 
         end # SnippetsReader
 
-        class ThemeAssetsReader < Base
+        # ThemeAssetsReader
+        #
+        #
+        class ThemeAssetsReader
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :runner, :items
+
+          delegate :uri, :uri_with_scheme, :base_uri_with_scheme, to: :runner
+          delegate :locales, to: :mounting_point
 
           def initialize(runner)
-            super
+            self.runner  = runner
             self.items = []
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
+
+            return response if raw
+
+            case response
+            when Hash then response.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              response.map do |row|
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              response
+            end
           end
 
           # Build the list of theme assets from the public folder with eager loading.
@@ -636,7 +881,7 @@ module Locomotive
           # @return [ Array ] The cached list of theme assets
           #
           def read
-            super
+            self.output_title(:pulling)
 
             self.items = self.get(:theme_assets).map do |attributes|
               url = attributes.delete('url')
@@ -655,14 +900,53 @@ module Locomotive
 
         end # ThemeAssetsReader
 
-        class TranslationsReader < Base
+        # TranslationsReader
+        #
+        #
+        class TranslationsReader
+
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :runner, :items
+
+          delegate :uri, :uri_with_scheme, :base_uri_with_scheme, to: :runner
+          delegate :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params).parsed_response
+
+            return response if raw
+
+            case response
+            when Hash then response.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              response.map do |row|
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              response
+            end
+          end
 
           # Build the list of translations
           #
           # @return [ Array ] The cached list of theme assets
           #
           def read
-            super
+            self.output_title(:pulling)
 
             self.items = get(:translations).each_with_object({}) do |attributes,hash|
               hash[attributes['key']] = Locomotive::Mounter::Models::Translation.new(attributes)
