@@ -36,8 +36,7 @@ module Locomotive
 
         end
 
-        class Base
-
+        class ContentAssetsReader
           attr_accessor :runner, :items
 
           delegate :default_locale, :locales, to: :mounting_point
@@ -49,6 +48,20 @@ module Locomotive
 
           def mounting_point
             self.runner.mounting_point
+          end
+
+          # Build the list of contents assets
+          #
+          # @return [ Array ] The list of content assets
+          #
+          def read
+            self.items = {} # prefer an array over a hash
+
+            self.fetch_from_pages
+
+            self.fetch_from_content_entries
+
+            self.items
           end
 
           protected
@@ -89,26 +102,6 @@ module Locomotive
           def read_yaml(filepath)
             YAML::load(File.open(filepath).read.force_encoding('utf-8'))
           end
-
-        end # Base
-
-        class ContentAssetsReader < Base
-
-          # Build the list of contents assets
-          #
-          # @return [ Array ] The list of content assets
-          #
-          def read
-            self.items = {} # prefer an array over a hash
-
-            self.fetch_from_pages
-
-            self.fetch_from_content_entries
-
-            self.items
-          end
-
-          protected
 
           # Fetch the files from the template of all the pages
           #
@@ -171,7 +164,10 @@ module Locomotive
           end
         end # ContentAssetsReader
 
-        class ContentEntriesReader < Base
+        # ContentEntriesReader
+        #
+        #
+        class ContentEntriesReader
 
           # Build the list of content types from the folder on the file system.
           #
@@ -183,7 +179,57 @@ module Locomotive
             self.items
           end
 
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
           protected
+
+          # Return the locale of a file based on its extension.
+          #
+          # Ex:
+          #   about_us/john_doe.fr.liquid.haml => 'fr'
+          #   about_us/john_doe.liquid.haml => 'en' (default locale)
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+          #
+          def filepath_locale(filepath)
+            locale = File.basename(filepath).split('.')[1]
+
+            if locale.nil?
+              # no locale, use the default one
+              self.default_locale
+            elsif self.locales.include?(locale)
+              # the locale is registered
+              locale
+            elsif locale.size == 2
+              # unregistered locale
+              nil
+            else
+              self.default_locale
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          end
 
           def fetch_from_filesystem
             Dir.glob(File.join(self.root_dir, '*.yml')).each do |filepath|
@@ -259,7 +305,10 @@ module Locomotive
 
         end # ContentEntriesReader
 
-        class ContentTypesReader < Base
+        # ContentTypesReader
+        #
+        #
+        class ContentTypesReader
 
           # Build the list of content types from the folder in the file system.
           #
@@ -271,7 +320,57 @@ module Locomotive
             self.items
           end
 
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
           protected
+
+          # Return the locale of a file based on its extension.
+          #
+          # Ex:
+          #   about_us/john_doe.fr.liquid.haml => 'fr'
+          #   about_us/john_doe.liquid.haml => 'en' (default locale)
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+          #
+          def filepath_locale(filepath)
+            locale = File.basename(filepath).split('.')[1]
+
+            if locale.nil?
+              # no locale, use the default one
+              self.default_locale
+            elsif self.locales.include?(locale)
+              # the locale is registered
+              locale
+            elsif locale.size == 2
+              # unregistered locale
+              nil
+            else
+              self.default_locale
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          end
 
           def fetch_from_filesystem
             Dir.glob(File.join(self.root_dir, '*.yml')).each do |filepath|
@@ -338,14 +437,19 @@ module Locomotive
 
         end # ContentTypesReader
 
-        class PagesReader < Base
+        class PagesReader
 
           attr_accessor :pages
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
 
           def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
             self.pages = {}
-            super
           end
+
 
           # Build the tree of pages based on the filesystem structure
           #
@@ -368,7 +472,49 @@ module Locomotive
             self.pages
           end
 
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
           protected
+
+          # Return the locale of a file based on its extension.
+          #
+          # Ex:
+          #   about_us/john_doe.fr.liquid.haml => 'fr'
+          #   about_us/john_doe.liquid.haml => 'en' (default locale)
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+          #
+          def filepath_locale(filepath)
+            locale = File.basename(filepath).split('.')[1]
+
+            if locale.nil?
+              # no locale, use the default one
+              self.default_locale
+            elsif self.locales.include?(locale)
+              # the locale is registered
+              locale
+            elsif locale.size == 2
+              # unregistered locale
+              nil
+            else
+              self.default_locale
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          end
 
           # Create a ordered list of pages from the Hash
           #
@@ -540,7 +686,7 @@ module Locomotive
 
         end # PagesReader
 
-        class SiteReader < Base
+        class SiteReader
           def read
             path = self.runner.path
             config_path = File.join(path, 'config', 'site.yml')
@@ -555,9 +701,61 @@ module Locomotive
              Time.zone = ActiveSupport::TimeZone.new(_site.timezone || 'UTC')
             end
           end
+
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          protected
+
+          # Return the locale of a file based on its extension.
+          #
+          # Ex:
+          #   about_us/john_doe.fr.liquid.haml => 'fr'
+          #   about_us/john_doe.liquid.haml => 'en' (default locale)
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+          #
+          def filepath_locale(filepath)
+            locale = File.basename(filepath).split('.')[1]
+
+            if locale.nil?
+              # no locale, use the default one
+              self.default_locale
+            elsif self.locales.include?(locale)
+              # the locale is registered
+              locale
+            elsif locale.size == 2
+              # unregistered locale
+              nil
+            else
+              self.default_locale
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          end
         end # SiteReader
 
-        class SnippetsReader < Base
+        class SnippetsReader
 
           # Build the list of snippets from the folder on the file system.
           #
@@ -571,7 +769,57 @@ module Locomotive
             self.items
           end
 
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
           protected
+
+          # Return the locale of a file based on its extension.
+          #
+          # Ex:
+          #   about_us/john_doe.fr.liquid.haml => 'fr'
+          #   about_us/john_doe.liquid.haml => 'en' (default locale)
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+          #
+          def filepath_locale(filepath)
+            locale = File.basename(filepath).split('.')[1]
+
+            if locale.nil?
+              # no locale, use the default one
+              self.default_locale
+            elsif self.locales.include?(locale)
+              # the locale is registered
+              locale
+            elsif locale.size == 2
+              # unregistered locale
+              nil
+            else
+              self.default_locale
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          end
 
           # Record snippets found in file system
           def fetch_from_filesystem
@@ -663,7 +911,10 @@ module Locomotive
 
         end # SnippetsReader
 
-        class ThemeAssetsReader < Base
+        # ThemeAssetsReader
+        #
+        #
+        class ThemeAssetsReader
 
           # Build the list of theme assets from the public folder with eager loading.
           #
@@ -673,7 +924,57 @@ module Locomotive
             ThemeAssetsArray.new(self.root_dir)
           end
 
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
           protected
+
+          # Return the locale of a file based on its extension.
+          #
+          # Ex:
+          #   about_us/john_doe.fr.liquid.haml => 'fr'
+          #   about_us/john_doe.liquid.haml => 'en' (default locale)
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+          #
+          def filepath_locale(filepath)
+            locale = File.basename(filepath).split('.')[1]
+
+            if locale.nil?
+              # no locale, use the default one
+              self.default_locale
+            elsif self.locales.include?(locale)
+              # the locale is registered
+              locale
+            elsif locale.size == 2
+              # unregistered locale
+              nil
+            else
+              self.default_locale
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          end
 
           # Return the directory where all the theme assets
           # are stored in the filesystem.
@@ -735,7 +1036,10 @@ module Locomotive
           end
         end # ThemeAssetsArray
 
-        class TranslationsReader < Base
+        # TranslationsReader
+        #
+        #
+        class TranslationsReader
 
           # Build the list of translations based on the config/translations.yml file
           #
@@ -758,6 +1062,58 @@ module Locomotive
                 end
               end
             end
+          end
+
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            self.runner  = runner
+            self.items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          protected
+
+          # Return the locale of a file based on its extension.
+          #
+          # Ex:
+          #   about_us/john_doe.fr.liquid.haml => 'fr'
+          #   about_us/john_doe.liquid.haml => 'en' (default locale)
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+          #
+          def filepath_locale(filepath)
+            locale = File.basename(filepath).split('.')[1]
+
+            if locale.nil?
+              # no locale, use the default one
+              self.default_locale
+            elsif self.locales.include?(locale)
+              # the locale is registered
+              locale
+            elsif locale.size == 2
+              # unregistered locale
+              nil
+            else
+              self.default_locale
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
           end
         end # TranslationsReader
       end # FileSystem
