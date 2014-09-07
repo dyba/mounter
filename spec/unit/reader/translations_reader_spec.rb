@@ -12,6 +12,9 @@ RSpec.describe Locomotive::Mounter::Reader::FileSystem::TranslationsReader do
     translations = { "en" => "Powered by", "fr" => "Propulsé par" }
     data = subject.read
 
-    expect(data["powered_by"].values).to eq translations
+    translatable = data["powered_by"].values
+
+    expect(translatable["en"]).to eq translations["en"]
+    expect(translatable["fr"]).to eq translations["fr"]
   end
 end

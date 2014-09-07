@@ -1100,29 +1100,23 @@ module Locomotive
           end
         end # ThemeAssetsArray
 
-        # TranslationsReader
-        #
-        #
-        class TranslationsReader
-          attr_accessor :runner, :items
+        require 'singleton'
 
-          delegate :default_locale, :locales, to: :mounting_point
+        class Reader
+          include Singleton
 
-          def initialize(runner)
-            self.runner  = runner
-            self.items   = {}
+          def read_yaml(filepath)
+            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
           end
 
-          # Build the list of translations based on the config/translations.yml file
-          #
-          # @return [ Hash ] Hash whose the key is the translation key
-          #
-          def read
-            config_path = File.join(self.runner.path, 'config', 'translations.yml')
+          def for_translations(runner)
+            path = runner.path
+            config_path = File.join(path, 'config', 'translations.yml')
 
             {}.tap do |translations|
               if File.exists?(config_path)
-                (self.read_yaml(config_path) || []).each do |translation|
+                yaml = read_yaml(config_path) || []
+                yaml.each do |translation|
                   key, values = translation
 
                   entry = Locomotive::Mounter::Models::Translation.new({
@@ -1135,48 +1129,28 @@ module Locomotive
               end
             end
           end
+        end
 
-          def mounting_point
-            self.runner.mounting_point
+        module Readable
+          def read
+            accept(Reader.instance)
+          end
+        end
+
+        # TranslationsReader
+        #
+        #
+        class TranslationsReader
+          include Readable
+
+          attr_accessor :runner
+
+          def initialize(runner)
+            @runner  = runner
           end
 
-          protected
-
-          # Return the locale of a file based on its extension.
-          #
-          # Ex:
-          #   about_us/john_doe.fr.liquid.haml => 'fr'
-          #   about_us/john_doe.liquid.haml => 'en' (default locale)
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
-          #
-          def filepath_locale(filepath)
-            locale = File.basename(filepath).split('.')[1]
-
-            if locale.nil?
-              # no locale, use the default one
-              self.default_locale
-            elsif self.locales.include?(locale)
-              # the locale is registered
-              locale
-            elsif locale.size == 2
-              # unregistered locale
-              nil
-            else
-              self.default_locale
-            end
-          end
-
-          # Open a YAML file and returns the content of the file
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] The content of the file
-          #
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          def accept(ask)
+            ask.for_translations(@runner)
           end
         end # TranslationsReader
       end # FileSystem
