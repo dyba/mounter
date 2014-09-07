@@ -89,6 +89,11 @@ module Locomotive
             Locomotive::Mounter::MountingPoint.new.tap do |mounting_point|
               self.mounting_point = mounting_point
 
+              # WHY ???
+              #
+              # We are now bound requiring our classes to be named with the Reader suffix.
+              # This places unnecessary constraints in the design of our application
+              #
               self.readers.each do |reader|
                 name = reader.name.gsub(/(Reader)$/, '').demodulize.underscore
 
@@ -102,11 +107,80 @@ module Locomotive
           end
         end
 
+        module YamlHelpers
+          # Take the list of options described in the YAML file
+          # and convert it into a nice array of hashes
+          #
+          # @params [ Array ] options The list of raw options
+          #
+          # @return [ Array ] The sanitized list of options
+          #
+          def sanitize_select_options(options)
+            [].tap do |array|
+              options.each_with_index do |object, position|
+                array << { name: object, position: position }
+              end
+            end
+          end
+
+          # Open a YAML file and returns the content of the file
+          #
+          # @param [ String ] filepath The path to the file
+          #
+          # @return [ Object ] The content of the file
+          #
+          def read_yaml(filepath)
+            file = File.open(filepath).read.force_encoding('utf-8')
+            YAML::load(file)
+          end
+        end
+
+        # Holds all the reader logic for every Reader class
+        #
+        #
         class Reader
           include Singleton
+          include YamlHelpers
 
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
+          def for_content_types(runner, items, mounting_point)
+            root_dir = File.join(runner.path, 'app', 'content_types')
+
+            Dir.glob(File.join(root_dir, '*.yml')).each do |filepath|
+              attributes = read_yaml(filepath)
+
+              # Formerly the add method
+              #
+              # Add a new content type in the global hash of content types.
+              # If the content type exists, it returns it.
+              #
+              # @param [ Hash ] attributes The attributes of the content type
+              #
+              # @return [ Object ] A newly created content type or the existing one
+              #
+              slug = attributes['slug']
+
+              # TODO: raise an error if no fields
+
+              attributes.delete('fields').each_with_index do |_attributes, index|
+                hash = { name: _attributes.keys.first, position: index }.merge(_attributes.values.first)
+
+                if options = hash.delete('select_options')
+                  hash['select_options'] = sanitize_select_options(options)
+                end
+
+                (attributes['fields'] ||= []) << hash
+              end
+
+              attributes[:mounting_point] = mounting_point
+
+              unless items.key?(slug)
+                items[slug] = Locomotive::Mounter::Models::ContentType.new(attributes)
+              end
+
+              items[slug]
+            end
+
+            items
           end
 
           def for_site(runner)
@@ -284,17 +358,6 @@ module Locomotive
         #
         #
         class ContentEntriesReader
-
-          # Build the list of content types from the folder on the file system.
-          #
-          # @return [ Array ] The un-ordered list of content types
-          #
-          def read
-            self.fetch_from_filesystem
-
-            self.items
-          end
-
           attr_accessor :runner, :items
 
           delegate :default_locale, :locales, to: :mounting_point
@@ -304,38 +367,20 @@ module Locomotive
             self.items   = {}
           end
 
+          # Build the list of content types from the folder on the file system.
+          #
+          # @return [ Array ] The un-ordered list of content types
+          #
+          def read
+            self.fetch_from_filesystem
+            self.items
+          end
+
           def mounting_point
             self.runner.mounting_point
           end
 
           protected
-
-          # Return the locale of a file based on its extension.
-          #
-          # Ex:
-          #   about_us/john_doe.fr.liquid.haml => 'fr'
-          #   about_us/john_doe.liquid.haml => 'en' (default locale)
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
-          #
-          def filepath_locale(filepath)
-            locale = File.basename(filepath).split('.')[1]
-
-            if locale.nil?
-              # no locale, use the default one
-              self.default_locale
-            elsif self.locales.include?(locale)
-              # the locale is registered
-              locale
-            elsif locale.size == 2
-              # unregistered locale
-              nil
-            else
-              self.default_locale
-            end
-          end
 
           # Open a YAML file and returns the content of the file
           #
@@ -421,136 +466,29 @@ module Locomotive
 
         end # ContentEntriesReader
 
+
         # ContentTypesReader
         #
         #
         class ContentTypesReader
-
-          # Build the list of content types from the folder in the file system.
-          #
-          # @return [ Array ] The un-ordered list of content types
-          #
-          def read
-            self.fetch_from_filesystem
-
-            self.items
-          end
+          include Readable
 
           attr_accessor :runner, :items
 
           delegate :default_locale, :locales, to: :mounting_point
 
           def initialize(runner)
-            self.runner  = runner
-            self.items   = {}
+            @runner  = runner
+            @items   = {}
           end
 
           def mounting_point
             self.runner.mounting_point
           end
 
-          protected
-
-          # Return the locale of a file based on its extension.
-          #
-          # Ex:
-          #   about_us/john_doe.fr.liquid.haml => 'fr'
-          #   about_us/john_doe.liquid.haml => 'en' (default locale)
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
-          #
-          def filepath_locale(filepath)
-            locale = File.basename(filepath).split('.')[1]
-
-            if locale.nil?
-              # no locale, use the default one
-              self.default_locale
-            elsif self.locales.include?(locale)
-              # the locale is registered
-              locale
-            elsif locale.size == 2
-              # unregistered locale
-              nil
-            else
-              self.default_locale
-            end
+          def accept(ask)
+            ask.for_content_types(@runner, @items, mounting_point)
           end
-
-          # Open a YAML file and returns the content of the file
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] The content of the file
-          #
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
-          end
-
-          def fetch_from_filesystem
-            Dir.glob(File.join(self.root_dir, '*.yml')).each do |filepath|
-              attributes = self.read_yaml(filepath)
-
-              self.add(attributes)
-            end
-          end
-
-          # Add a new content type in the global hash of content types.
-          # If the content type exists, it returns it.
-          #
-          # @param [ Hash ] attributes The attributes of the content type
-          #
-          # @return [ Object ] A newly created content type or the existing one
-          #
-          def add(attributes)
-            slug = attributes['slug']
-
-            # TODO: raise an error if no fields
-
-            attributes.delete('fields').each_with_index do |_attributes, index|
-              hash = { name: _attributes.keys.first, position: index }.merge(_attributes.values.first)
-
-              if options = hash.delete('select_options')
-                hash['select_options'] = self.sanitize_select_options(options)
-              end
-
-              (attributes['fields'] ||= []) << hash
-            end
-
-            attributes[:mounting_point] = self.mounting_point
-
-            unless self.items.key?(slug)
-              self.items[slug] = Locomotive::Mounter::Models::ContentType.new(attributes)
-            end
-
-            self.items[slug]
-          end
-
-          # Take the list of options described in the YAML file
-          # and convert it into a nice array of hashes
-          #
-          # @params [ Array ] options The list of raw options
-          #
-          # @return [ Array ] The sanitized list of options
-          #
-          def sanitize_select_options(options)
-            [].tap do |array|
-              options.each_with_index do |object, position|
-                array << { name: object, position: position }
-              end
-            end
-          end
-
-          # Return the directory where all the definition of
-          # the content types are stored.
-          #
-          # @return [ String ] The content types directory
-          #
-          def root_dir
-            File.join(self.runner.path, 'app', 'content_types')
-          end
-
         end # ContentTypesReader
 
         class PagesReader
