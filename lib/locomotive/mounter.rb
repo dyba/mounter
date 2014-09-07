@@ -52,7 +52,6 @@ require 'locomotive/mounter/models/base'
 Dir[File.join(File.dirname(__FILE__), 'mounter/models', '*.rb')].each { |lib| require lib }
 
 # Readers: Filesystem / API
-require 'locomotive/mounter/reader/runner'
 require 'locomotive/mounter/reader/file_system'
 require 'locomotive/mounter/reader/api'
 
