@@ -466,31 +466,6 @@ module Locomotive
 
         end # ContentEntriesReader
 
-
-        # ContentTypesReader
-        #
-        #
-        class ContentTypesReader
-          include Readable
-
-          attr_accessor :runner, :items
-
-          delegate :default_locale, :locales, to: :mounting_point
-
-          def initialize(runner)
-            @runner  = runner
-            @items   = {}
-          end
-
-          def mounting_point
-            self.runner.mounting_point
-          end
-
-          def accept(ask)
-            ask.for_content_types(@runner, @items, mounting_point)
-          end
-        end # ContentTypesReader
-
         class PagesReader
 
           attr_accessor :pages
@@ -503,7 +478,6 @@ module Locomotive
             self.items   = {}
             self.pages = {}
           end
-
 
           # Build the tree of pages based on the filesystem structure
           #
@@ -525,7 +499,6 @@ module Locomotive
 
             self.pages
           end
-
 
           def mounting_point
             self.runner.mounting_point
@@ -739,20 +712,6 @@ module Locomotive
           end
 
         end # PagesReader
-
-        class SiteReader
-          include Readable
-
-          attr_accessor :runner
-
-          def initialize(runner)
-            self.runner  = runner
-          end
-
-          def accept(ask)
-            ask.for_site(@runner)
-          end
-        end # SiteReader
 
         class SnippetsReader
 
@@ -1034,6 +993,44 @@ module Locomotive
             self.list.send(name.to_sym, *args, &block)
           end
         end # ThemeAssetsArray
+
+        class SiteReader
+          include Readable
+
+          attr_accessor :runner
+
+          def initialize(runner)
+            self.runner  = runner
+          end
+
+          def accept(ask)
+            ask.for_site(@runner)
+          end
+        end # SiteReader
+
+        # ContentTypesReader
+        #
+        #
+        class ContentTypesReader
+          include Readable
+
+          attr_accessor :runner, :items
+
+          delegate :default_locale, :locales, to: :mounting_point
+
+          def initialize(runner)
+            @runner  = runner
+            @items   = {}
+          end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          def accept(ask)
+            ask.for_content_types(@runner, @items, mounting_point)
+          end
+        end # ContentTypesReader
 
         # TranslationsReader
         #
