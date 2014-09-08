@@ -1,7 +1,5 @@
 require 'spec_helper'
 
-require 'locomotive/mounter/writer/api/base'
-
 describe Locomotive::Mounter::Writer::Api::Base do
 
   let(:content_assets_writer) { double }
