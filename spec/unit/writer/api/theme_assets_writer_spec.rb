@@ -1,8 +1,5 @@
 require 'spec_helper'
 
-require 'locomotive/mounter/writer/api/base'
-require 'locomotive/mounter/writer/api/theme_assets_writer'
-
 describe Locomotive::Mounter::Writer::Api::ThemeAssetsWriter do
 
   let(:writer) { build_theme_asset_writer }

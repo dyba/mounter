@@ -2616,6 +2616,398 @@ module Locomotive
           end
 
         end
+
+        # Push theme assets to a remote LocomotiveCMS engine.
+        #
+        # New assets are automatically pushed.
+        # Existing ones are not pushed unless the :force option is
+        # passed OR if the size of the asset (if not a javascript or stylesheet) has changed.
+        #
+        class ThemeAssetsWriter
+
+          # Other local attributes
+          attr_accessor :tmp_folder
+
+          # store checksums of remote assets. needed to check if an asset has to be updated or not
+          attr_accessor :checksums
+
+          # the assets stored in the engine have the same base url
+          attr_accessor :remote_base_url
+
+          # cache the compiled theme assets to avoid to perform compilation more than once
+          attr_accessor :cached_compiled_assets
+
+          def prepare
+            self.output_title
+
+            self.checksums = {}
+
+            self.cached_compiled_assets = {}
+
+            # prepare the place where the assets will be stored temporarily.
+            self.create_tmp_folder
+
+            # assign an _id to a local content type if possible
+            self.get(:theme_assets, nil, true).each do |attributes|
+              remote_path = File.join(attributes['folder'], File.basename(attributes['local_path']))
+
+              if theme_asset = self.theme_assets[remote_path]
+                theme_asset._id                 = attributes['id']
+                self.checksums[theme_asset._id] = attributes['checksum']
+              end
+
+              if remote_base_url.nil?
+                attributes['url'] =~ /(.*\/sites\/[0-9a-f]+\/theme)/
+                self.remote_base_url = $1
+              end
+            end
+          end
+
+          def write
+            self.theme_assets_by_priority.each do |theme_asset|
+              # track it in the logs
+              self.output_resource_op theme_asset
+
+              status  = :skipped
+              errors  = []
+              file    = self.build_temp_file(theme_asset)
+              params  = theme_asset.to_params.merge(source: file, performing_plain_text: false)
+
+              begin
+                if theme_asset.persisted?
+                  # we only update it if the size has changed or if the force option has been set.
+                  if self.force? || self.theme_asset_changed?(theme_asset)
+                    response  = self.put :theme_assets, theme_asset._id, params
+                    status    = self.response_to_status(response)
+                  else
+                    status = :same
+                  end
+                else
+                  response  = self.post :theme_assets, params, nil, true
+                  status    = self.response_to_status(response)
+                end
+              rescue Exception => e
+                if self.force?
+                  status, errors = :error, e.message
+                else
+                  raise e
+                end
+              end
+
+              # very important. we do not want a huge number of non-closed file descriptor.
+              file.close
+
+              # track the status
+              self.output_resource_op_status theme_asset, status, errors
+            end
+
+            # make the stuff like they were before
+            self.remove_tmp_folder
+          end
+
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :mounting_point, :runner
+
+          delegate :default_locale, :locales, :site, :sprockets, to: :mounting_point
+
+          delegate :content_assets_writer, to: :runner
+
+          delegate :force?, to: :runner
+
+          def initialize(mounting_point, runner)
+            self.mounting_point = mounting_point
+            self.runner         = runner
+          end
+
+          # By setting the data option to true, user content (content entries and
+          # editable elements from page) can be pushed too.
+          # By default, its value is false.
+          #
+          # @return [ Boolean ] True if the data option has been set to true
+          #
+          def data?
+            self.runner.parameters[:data] || false
+          end
+
+          # Get remote resource(s) by the API
+          #
+          # @param [ String ] resource_name The path to the resource (usually, the resource name)
+          # @param [ String ] locale The locale for the request
+          # @param [ Boolean ] raw True if the result has to be converted into object.
+          #
+          # @return [ Object] The object or a collection of objects.
+          #
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response  = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params)
+            data      = response.parsed_response
+
+            if response.success?
+              return data if raw
+              self.raw_data_to_object(data)
+            else
+              raise WriterException.new(data['error'])
+            end
+          end
+
+          # Create a resource by the API.
+          #
+          # @param [ String ] resource_name The path to the resource (usually, the resource name)
+          # @param [ Hash ] params The attributes of the resource
+          # @param [ String ] locale The locale for the request
+          # @param [ Boolean ] raw True if the result has to be converted into object.
+          #
+          # @return [ Object] The response of the API or nil if an error occurs
+          #
+          def post(resource_name, params, locale = nil, raw = false)
+            params_name = resource_name.to_s.split('/').last.singularize
+
+            query = { query: { params_name => params } }
+
+            query[:query][:locale] = locale if locale
+
+            response  = Locomotive::Mounter::EngineApi.post("/#{resource_name}.json", query)
+            data      = response.parsed_response
+
+            if response.success?
+              return data if raw
+              self.raw_data_to_object(data)
+            else
+              message = data
+
+              message = data.map do |attribute, errors|
+                "      #{attribute} => #{[*errors].join(', ')}\n".colorize(color: :red)
+              end.join("\n") if data.respond_to?(:keys)
+
+              raise WriterException.new(message)
+
+              # self.log "\n"
+              # data.each do |attribute, errors|
+              #   self.log "      #{attribute} => #{[*errors].join(', ')}\n".colorize(color: :red)
+              # end if data.respond_to?(:keys)
+              # nil # DEBUG
+            end
+          end
+
+          # Update a resource by the API.
+          #
+          # @param [ String ] resource_name The path to the resource (usually, the resource name)
+          # @param [ String ] id The unique identifier of the resource
+          # @param [ Hash ] params The attributes of the resource
+          # @param [ String ] locale The locale for the request
+          #
+          # @return [ Object] The response of the API or nil if an error occurs
+          #
+          def put(resource_name, id, params, locale = nil)
+            params_name = resource_name.to_s.split('/').last.singularize
+
+            query = { query: { params_name => params } }
+
+            query[:query][:locale] = locale if locale
+
+            response  = Locomotive::Mounter::EngineApi.put("/#{resource_name}/#{id}.json", query)
+            data      = response.parsed_response
+
+            if response.success?
+              self.raw_data_to_object(data)
+            else
+              message = data
+
+              message = data.map do |attribute, errors|
+                "      #{attribute} => #{[*errors].join(', ')}" #.colorize(color: :red)
+              end.join("\n") if data.respond_to?(:keys)
+
+              raise WriterException.new(message)
+
+              # data.each do |attribute, errors|
+              #   self.log "\t\t #{attribute} => #{[*errors].join(', ')}".colorize(color: :red)
+              # end if data.respond_to?(:keys)
+              # nil # DEBUG
+            end
+          end
+
+          def safe_attributes
+            %w(_id)
+          end
+
+          # Loop on each locale of the mounting point and
+          # change the current locale at the same time.
+          def each_locale(&block)
+            self.mounting_point.locales.each do |locale|
+              Locomotive::Mounter.with_locale(locale) do
+                block.call(locale)
+              end
+            end
+          end
+
+          # Return the absolute path from a relative path
+          # pointing to an asset within the public folder
+          #
+          # @param [ String ] path The path to the file within the public folder
+          #
+          # @return [ String ] The absolute path
+          #
+          def absolute_path(path)
+            File.join(self.mounting_point.path, 'public', path)
+          end
+
+          # Take a path and convert it to a File object if possible
+          #
+          # @param [ String ] path The path to the file within the public folder
+          #
+          # @return [ Object ] The file
+          #
+          def path_to_file(path)
+            File.new(self.absolute_path(path))
+          end
+
+          # Take in the source the assets whose url begins by "/samples",
+          # upload them to the engine and replace them by their remote url.
+          #
+          # @param [ String ] source The source text
+          #
+          # @return [ String ] The source with remote urls
+          #
+          def replace_content_assets!(source)
+            return source if source.blank?
+
+            source.to_s.gsub(/\/samples\/\S*\.[a-zA-Z0-9]+/) do |match|
+              url = self.content_assets_writer.write(match)
+              url || match
+            end
+          end
+
+          protected
+
+          def response_to_status(response)
+            response ? :success : :error
+          end
+
+          # Convert raw data into the corresponding object (Page, Site, ...etc)
+          #
+          # @param [ Hash ] data The attributes of the object
+          #
+          # @return [ Object ] A new instance of the object
+          #
+          def raw_data_to_object(data)
+            case data
+            when Hash then data.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              data.map do |row|
+                # puts "#{row.inspect}\n---" # DEBUG
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              data
+            end
+          end
+
+          # Create the folder to store temporarily the files.
+          #
+          def create_tmp_folder
+            self.tmp_folder = self.runner.parameters[:tmp_dir] || File.join(Dir.getwd, '.push-tmp')
+
+            FileUtils.mkdir_p(self.tmp_folder)
+          end
+
+          # Clean the folder which had stored temporarily the files.
+          #
+          def remove_tmp_folder
+            FileUtils.rm_rf(self.tmp_folder) if self.tmp_folder
+          end
+
+          # Build a temp file from a theme asset.
+          #
+          # @param [ Object ] theme_asset The theme asset
+          #
+          # @return [ File ] The file descriptor
+          #
+          def build_temp_file(theme_asset)
+            path = File.join(self.tmp_folder, theme_asset.path)
+
+            FileUtils.mkdir_p(File.dirname(path))
+
+            File.open(path, 'w') do |file|
+              file.write(self.content_of(theme_asset))
+            end
+
+            File.new(path)
+          end
+
+          # Shortcut to get all the theme assets.
+          #
+          # @return [ Hash ] The hash whose key is the slug and the value is the snippet itself
+          #
+          def theme_assets
+            return @theme_assets if @theme_assets
+
+            @theme_assets = {}.tap do |hash|
+              self.mounting_point.theme_assets.each do |theme_asset|
+                hash[theme_asset.path] = theme_asset
+              end
+            end
+          end
+
+          # List of theme assets sorted by their priority.
+          #
+          # @return [ Array ] Sorted list of the theme assets
+          #
+          def theme_assets_by_priority
+            self.theme_assets.values.sort { |a, b| a.priority <=> b.priority }
+          end
+
+          # Tell if the theme_asset has been changed in order to update it
+          # if so or simply skip it.
+          #
+          # @param [ Object ] theme_asset The theme asset
+          #
+          # @return [ Boolean ] True if the checksums of the local and remote files are different.
+          #
+          def theme_asset_changed?(theme_asset)
+            content = self.content_of(theme_asset)
+
+            if theme_asset.stylesheet_or_javascript?
+              # we need to compare compiled contents (sass, coffeescript) with the right urls inside
+              content = content.gsub(/[("'](\/(stylesheets|javascripts|fonts|images|media|others)\/(([^;.]+)\/)*([a-zA-Z_\-0-9]+)\.[a-z]{2,3})[)"']/) do |path|
+                sanitized_path = path.gsub(/[("')]/, '').gsub(/^\//, '')
+                sanitized_path = File.join(self.remote_base_url, sanitized_path)
+
+                "#{path.first}#{sanitized_path}#{path.last}"
+              end
+            end
+
+            # compare local checksum with the remote one
+            Digest::MD5.hexdigest(content) != self.checksums[theme_asset._id]
+          end
+
+          # Return the content of a theme asset.
+          # If the theme asset is either a stylesheet or javascript file,
+          # it uses Sprockets to compile it.
+          # Otherwise, it returns the raw content of the asset.
+          #
+          # @return [ String ] The content of the theme asset
+          #
+          def content_of(theme_asset)
+            if theme_asset.stylesheet_or_javascript?
+              if self.cached_compiled_assets[theme_asset.path].nil?
+                self.cached_compiled_assets[theme_asset.path] = self.sprockets[theme_asset.short_path].to_s
+              end
+
+              self.cached_compiled_assets[theme_asset.path]
+            else
+              theme_asset.content
+            end
+          end
+
+          def sprockets
+            Locomotive::Mounter::Extensions::Sprockets.environment(self.mounting_point.path)
+          end
+
+        end
       end # Api
     end # Writer
   end # Mounter
