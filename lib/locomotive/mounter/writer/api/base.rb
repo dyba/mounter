@@ -2275,6 +2275,347 @@ module Locomotive
             end
           end
         end
+
+        # Push content types to a remote LocomotiveCMS engine.
+        #
+        # In a first time, create the content types without any relationships fields.
+        # Then, add the relationships one by one.
+        #
+        # If the :force option is passed, the remote fields not defined in the mounter version
+        # of the content type will be destroyed when pushed. The options of
+        # a select field will be pushed as well, otherwise they won't unless if
+        # it is a brand new content type.
+        #
+        class ContentTypesWriter
+
+          def prepare
+            self.output_title
+
+            # assign an _id to a local content type if possible
+            self.get(:content_types, nil, true).each do |attributes|
+              content_type = self.content_types[attributes['slug']]
+
+              self.apply_response(content_type, attributes)
+            end
+          end
+
+          def write
+            done = {}
+
+            # first new content types
+            self.not_persisted.each do |content_type|
+              self.create_content_type(content_type)
+
+              done[content_type.slug] = content_type.with_relationships? ? :todo : :done
+            end
+
+            # then update the others
+            self.content_types.values.each do |content_type|
+              next unless done[content_type.slug].nil?
+
+              self.update_content_type(content_type)
+            end
+
+            # finally, update the newly created embedding a relationship field
+            done.each do |slug, status|
+              next if status == :done
+
+              content_type = self.content_types[slug]
+
+              self.update_content_type(content_type)
+            end
+          end
+
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :mounting_point, :runner
+
+          delegate :default_locale, :locales, :site, :sprockets, to: :mounting_point
+
+          delegate :content_assets_writer, to: :runner
+
+          delegate :force?, to: :runner
+
+          def initialize(mounting_point, runner)
+            self.mounting_point = mounting_point
+            self.runner         = runner
+          end
+
+          # By setting the data option to true, user content (content entries and
+          # editable elements from page) can be pushed too.
+          # By default, its value is false.
+          #
+          # @return [ Boolean ] True if the data option has been set to true
+          #
+          def data?
+            self.runner.parameters[:data] || false
+          end
+
+          # Get remote resource(s) by the API
+          #
+          # @param [ String ] resource_name The path to the resource (usually, the resource name)
+          # @param [ String ] locale The locale for the request
+          # @param [ Boolean ] raw True if the result has to be converted into object.
+          #
+          # @return [ Object] The object or a collection of objects.
+          #
+          def get(resource_name, locale = nil, raw = false)
+            params = { query: {} }
+
+            params[:query][:locale] = locale if locale
+
+            response  = Locomotive::Mounter::EngineApi.get("/#{resource_name}.json", params)
+            data      = response.parsed_response
+
+            if response.success?
+              return data if raw
+              self.raw_data_to_object(data)
+            else
+              raise WriterException.new(data['error'])
+            end
+          end
+
+          # Create a resource by the API.
+          #
+          # @param [ String ] resource_name The path to the resource (usually, the resource name)
+          # @param [ Hash ] params The attributes of the resource
+          # @param [ String ] locale The locale for the request
+          # @param [ Boolean ] raw True if the result has to be converted into object.
+          #
+          # @return [ Object] The response of the API or nil if an error occurs
+          #
+          def post(resource_name, params, locale = nil, raw = false)
+            params_name = resource_name.to_s.split('/').last.singularize
+
+            query = { query: { params_name => params } }
+
+            query[:query][:locale] = locale if locale
+
+            response  = Locomotive::Mounter::EngineApi.post("/#{resource_name}.json", query)
+            data      = response.parsed_response
+
+            if response.success?
+              return data if raw
+              self.raw_data_to_object(data)
+            else
+              message = data
+
+              message = data.map do |attribute, errors|
+                "      #{attribute} => #{[*errors].join(', ')}\n".colorize(color: :red)
+              end.join("\n") if data.respond_to?(:keys)
+
+              raise WriterException.new(message)
+
+              # self.log "\n"
+              # data.each do |attribute, errors|
+              #   self.log "      #{attribute} => #{[*errors].join(', ')}\n".colorize(color: :red)
+              # end if data.respond_to?(:keys)
+              # nil # DEBUG
+            end
+          end
+
+          # Update a resource by the API.
+          #
+          # @param [ String ] resource_name The path to the resource (usually, the resource name)
+          # @param [ String ] id The unique identifier of the resource
+          # @param [ Hash ] params The attributes of the resource
+          # @param [ String ] locale The locale for the request
+          #
+          # @return [ Object] The response of the API or nil if an error occurs
+          #
+          def put(resource_name, id, params, locale = nil)
+            params_name = resource_name.to_s.split('/').last.singularize
+
+            query = { query: { params_name => params } }
+
+            query[:query][:locale] = locale if locale
+
+            response  = Locomotive::Mounter::EngineApi.put("/#{resource_name}/#{id}.json", query)
+            data      = response.parsed_response
+
+            if response.success?
+              self.raw_data_to_object(data)
+            else
+              message = data
+
+              message = data.map do |attribute, errors|
+                "      #{attribute} => #{[*errors].join(', ')}" #.colorize(color: :red)
+              end.join("\n") if data.respond_to?(:keys)
+
+              raise WriterException.new(message)
+
+              # data.each do |attribute, errors|
+              #   self.log "\t\t #{attribute} => #{[*errors].join(', ')}".colorize(color: :red)
+              # end if data.respond_to?(:keys)
+              # nil # DEBUG
+            end
+          end
+
+          def safe_attributes
+            %w(_id)
+          end
+
+          # Loop on each locale of the mounting point and
+          # change the current locale at the same time.
+          def each_locale(&block)
+            self.mounting_point.locales.each do |locale|
+              Locomotive::Mounter.with_locale(locale) do
+                block.call(locale)
+              end
+            end
+          end
+
+          # Return the absolute path from a relative path
+          # pointing to an asset within the public folder
+          #
+          # @param [ String ] path The path to the file within the public folder
+          #
+          # @return [ String ] The absolute path
+          #
+          def absolute_path(path)
+            File.join(self.mounting_point.path, 'public', path)
+          end
+
+          # Take a path and convert it to a File object if possible
+          #
+          # @param [ String ] path The path to the file within the public folder
+          #
+          # @return [ Object ] The file
+          #
+          def path_to_file(path)
+            File.new(self.absolute_path(path))
+          end
+
+          # Take in the source the assets whose url begins by "/samples",
+          # upload them to the engine and replace them by their remote url.
+          #
+          # @param [ String ] source The source text
+          #
+          # @return [ String ] The source with remote urls
+          #
+          def replace_content_assets!(source)
+            return source if source.blank?
+
+            source.to_s.gsub(/\/samples\/\S*\.[a-zA-Z0-9]+/) do |match|
+              url = self.content_assets_writer.write(match)
+              url || match
+            end
+          end
+
+          protected
+
+          def response_to_status(response)
+            response ? :success : :error
+          end
+
+          # Convert raw data into the corresponding object (Page, Site, ...etc)
+          #
+          # @param [ Hash ] data The attributes of the object
+          #
+          # @return [ Object ] A new instance of the object
+          #
+          def raw_data_to_object(data)
+            case data
+            when Hash then data.to_hash.delete_if { |k, _| !self.safe_attributes.include?(k) }
+            when Array
+              data.map do |row|
+                # puts "#{row.inspect}\n---" # DEBUG
+                row.delete_if { |k, _| !self.safe_attributes.include?(k) }
+              end
+            else
+              data
+            end
+          end
+
+          # Persist a content type by calling the API. It is enhanced then
+          # by the response if no errors occured.
+          #
+          # @param [ Object ] content_type The content type to create
+          #
+          def create_content_type(content_type)
+            self.output_resource_op content_type
+
+            response = self.post :content_types, content_type.to_params, nil, true
+
+            self.apply_response(content_type, response)
+
+            # status = self.response_to_status(response)
+
+            self.output_resource_op_status content_type, :success
+          rescue Exception => e
+            self.output_resource_op_status content_type, :error, e.message
+          end
+
+          # Update a content type by calling the API.
+          #
+          # @param [ Object ] content_type The content type to update
+          #
+          def update_content_type(content_type)
+            self.output_resource_op content_type
+
+            params = self.content_type_to_params(content_type)
+
+            # make a call to the API for the update
+            self.put :content_types, content_type._id, params
+
+            self.output_resource_op_status content_type, :success
+          rescue Exception => e
+            self.output_resource_op_status content_type, :error, e.message
+          end
+
+          def content_types
+            self.mounting_point.content_types
+          end
+
+          # Return the content types not persisted yet.
+          #
+          # @return [ Array ] The list of non persisted content types.
+          #
+          def not_persisted
+            self.content_types.values.find_all { |content_type| !content_type.persisted? }
+          end
+
+          # Enhance the content type with the information returned by an API call.
+          #
+          # @param [ Object ] content_type The content type instance
+          # @param [ Hash ] response The API response
+          #
+          def apply_response(content_type, response)
+            return if content_type.nil? || response.nil?
+
+            content_type._id = response['id']
+            content_type.klass_name = response['klass_name']
+
+            response['entries_custom_fields'].each do |remote_field|
+              field = content_type.find_field(remote_field['name'])
+              _id   = remote_field['id']
+
+              if field.nil?
+                if self.force?
+                  content_type.fields << Locomotive::Mounter::Models::ContentField.new(_id: _id, _destroy: true)
+                end
+              else
+                field._id = _id
+              end
+            end
+          end
+
+          # Get the params of a content type for an update.
+          # Delete the select_options unless the force flag is true.
+          #
+          # @param [ Object ] content_type The ContentType
+          #
+          # @return [ Hash ] The params of the ContentType ready to be used in the API
+          #
+          def content_type_to_params(content_type)
+            content_type.to_params(all_fields: true).tap do |params|
+              params[:entries_custom_fields].each do |attributes|
+                attributes.delete(:select_options) unless self.force?
+              end
+            end
+          end
+
+        end
       end # Api
     end # Writer
   end # Mounter
