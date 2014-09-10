@@ -348,7 +348,8 @@ module Locomotive
             self.output_title
 
             # set the unique identifier to each local translation
-            (self.get(:translations, nil, true) || []).each do |attributes|
+            data = self.get(:translations, nil, true) || []
+            data.each do |attributes|
               translation = self.translations[attributes['key']]
 
               translation._id = attributes['id'] if translation
@@ -2399,6 +2400,18 @@ module Locomotive
         # it is a brand new content type.
         #
         class ContentTypesWriter
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :mounting_point, :runner
+
+          delegate :default_locale, :locales, :site, :sprockets, to: :mounting_point
+          delegate :content_assets_writer, to: :runner
+          delegate :force?, to: :runner
+
+          def initialize(mounting_point, runner)
+            self.mounting_point = mounting_point
+            self.runner         = runner
+          end
 
           def prepare
             self.output_title
@@ -2436,21 +2449,6 @@ module Locomotive
 
               self.update_content_type(content_type)
             end
-          end
-
-          include Locomotive::Mounter::Utils::Output
-
-          attr_accessor :mounting_point, :runner
-
-          delegate :default_locale, :locales, :site, :sprockets, to: :mounting_point
-
-          delegate :content_assets_writer, to: :runner
-
-          delegate :force?, to: :runner
-
-          def initialize(mounting_point, runner)
-            self.mounting_point = mounting_point
-            self.runner         = runner
           end
 
           # By setting the data option to true, user content (content entries and

@@ -1,6 +1,5 @@
 module Locomotive
   module Mounter
-
     class MountingPoint
 
       attr_accessor :resources, :root_page, :path
@@ -59,7 +58,6 @@ module Locomotive
       def inspect
         "[MountingPoint] #{(self.resources || {}).keys.inspect}"
       end
-
     end
   end
 end

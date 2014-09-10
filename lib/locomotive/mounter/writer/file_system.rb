@@ -292,6 +292,7 @@ module Locomotive
           # It creates the content types folder
           def prepare
             self.output_title(:writing)
+
             self.create_folder 'app/content_types'
           end
 
@@ -743,9 +744,21 @@ module Locomotive
         end
 
         class TranslationsWriter
+          include Locomotive::Mounter::Utils::Output
+
+          attr_accessor :mounting_point, :runner
+
+          def initialize(mounting_point, runner)
+            self.mounting_point = mounting_point
+            self.runner         = runner
+          end
 
           def prepare
             self.output_title(:writing)
+
+            #=============================================================================
+            # FILE UTILITY RESPONSIBILITY
+            #=============================================================================
             self.create_folder 'config'
           end
 
@@ -761,15 +774,10 @@ module Locomotive
             end
           end
 
-          include Locomotive::Mounter::Utils::Output
-
-          attr_accessor :mounting_point, :runner
-
-          def initialize(mounting_point, runner)
-            self.mounting_point = mounting_point
-            self.runner         = runner
-          end
-
+          #=============================================================================
+          # FILE UTILITY RESPONSIBILITY
+          #=============================================================================
+          #
           # Helper method to create a folder from a relative path
           #
           # @param [ String ] path The relative path

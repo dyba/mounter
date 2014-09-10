@@ -60,9 +60,7 @@ require 'locomotive/mounter/writer/file_system'
 require 'locomotive/mounter/writer/api'
 
 module Locomotive
-
   module Mounter
-
     TEMPLATE_EXTENSIONS = %w(liquid haml)
 
     @@logger = ::Logger.new(STDOUT).tap { |log| log.level = ::Logger::DEBUG }
@@ -98,7 +96,5 @@ module Locomotive
         @@locale = tmp
       end
     end
-
   end
-
 end

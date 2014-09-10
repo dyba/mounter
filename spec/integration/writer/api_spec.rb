@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe Locomotive::Mounter::Writer::Api, :vcr do
+RSpec.describe Locomotive::Mounter::Writer::Api, :vcr do
   after(:all) do
     teardown
   end
@@ -11,59 +11,51 @@ describe Locomotive::Mounter::Writer::Api, :vcr do
     end
 
     describe 'site' do
-
       it 'has been created' do
-        expect(Locomotive::Mounter::EngineApi.get('/current_site.json').success?).to be true
-      end
+        response = Locomotive::Mounter::EngineApi.get('/current_site.json')
 
+        expect(response.success?).to be true
+      end
     end
 
     describe 'content types' do
-
       it 'creates all the content types' do
-        Locomotive::Mounter::EngineApi.get('/content_types.json').to_a.size.should == 5
-      end
+        response = Locomotive::Mounter::EngineApi.get('/content_types.json')
 
+        expect(response.to_a.size).to eq 5
+      end
     end
 
     describe 'content entries' do
-
       it 'creates all the content entries' do
-        Locomotive::Mounter::EngineApi.get('/content_types/events/entries.json').to_a.size.should == 12
-      end
+        response = Locomotive::Mounter::EngineApi.get('/content_types/events/entries.json')
 
+        expect(response.to_a.size).to eq 12
+      end
     end
 
     describe 'pages' do
-
       it 'creates all the pages' do
         Locomotive::Mounter::EngineApi.get('/pages.json').to_a.size.should == 14
       end
-
     end
 
     describe 'snippets' do
-
       it 'creates all the snippets' do
         Locomotive::Mounter::EngineApi.get('/snippets.json').to_a.size.should == 3
       end
-
     end
 
     describe 'theme assets' do
-
       it 'creates all the theme assets' do
         Locomotive::Mounter::EngineApi.get('/theme_assets.json').to_a.size.should == 17
       end
-
     end
 
     describe 'content assets' do
-
       it 'creates all the theme assets' do
         Locomotive::Mounter::EngineApi.get('/content_assets.json').to_a.size.should == 1
       end
-
     end
 
     describe 'translations' do
@@ -71,7 +63,6 @@ describe Locomotive::Mounter::Writer::Api, :vcr do
         Locomotive::Mounter::EngineApi.get('/translations.json').to_a.size.should == 0
       end
     end
-
   end
 
   context "forcing translations" do

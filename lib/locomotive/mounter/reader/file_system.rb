@@ -143,6 +143,7 @@ module Locomotive
           include YamlHelpers
 
           def for_content_types(runner, items, mounting_point)
+            # We use the runner to retrieve the path
             root_dir = File.join(runner.path, 'app', 'content_types')
 
             Dir.glob(File.join(root_dir, '*.yml')).each do |filepath|
@@ -184,21 +185,94 @@ module Locomotive
           end
 
           def for_site(runner)
+            # We only use the runner to retrieve the path
             path = runner.path
             config_path = File.join(path, 'config', 'site.yml')
 
             site = read_yaml(config_path)
 
             # set the default locale first
-            Locomotive::Mounter.locale = site['locales'].first.to_sym rescue Locomotive::Mounter.locale
+            begin
+              Locomotive::Mounter.locale = site['locales'].first.to_sym
+            rescue
+              Locomotive::Mounter.locale
+            end
 
             Locomotive::Mounter::Models::Site.new(site).tap do |_site|
-             # set the time zone for the next Time operations (UTC by default)
-             Time.zone = ActiveSupport::TimeZone.new(_site.timezone || 'UTC')
+              # set the time zone for the next Time operations (UTC by default)
+              Time.zone = ActiveSupport::TimeZone.new(_site.timezone || 'UTC')
             end
           end
 
+          def for_snippets(runner, items)
+            root_dir = File.join(runner.path, 'app', 'views', 'snippets')
+
+            Dir.glob(File.join(root_dir, "*.{#{Locomotive::Mounter::TEMPLATE_EXTENSIONS.join(',')}}")).each do |filepath|
+              fullpath = File.basename(filepath)
+
+              slug = File.basename(filepath).split('.').first.permalink
+
+              unless items.key?(slug)
+                items[slug] = Locomotive::Mounter::Models::Snippet.new({
+                  name:     slug.humanize,
+                  slug:     slug,
+                  template: Locomotive::Mounter::Utils::YAMLFrontMattersTemplate.new(filepath)
+                })
+              end
+
+              snippet = items[slug]
+
+              # Return the locale of a file based on its extension.
+              #
+              # Ex:
+              #   about_us/john_doe.fr.liquid.haml => 'fr'
+              #   about_us/john_doe.liquid.haml => 'en' (default locale)
+              #
+              # @param [ String ] filepath The path to the file
+              #
+              # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
+              #
+              locale = File.basename(filepath).split('.')[1]
+
+              if locale.nil?
+                # no locale, use the default one
+                current_locale = runner.mounting_point.default_locale
+              elsif runner.mounting_point.locales.include?(locale)
+                # the locale is registered
+                current_locale = locale
+              elsif locale.size == 2
+                # unregistered locale
+                current_locale = nil
+              else
+                current_locale = runner.mounting_point.default_locale
+              end
+
+              Locomotive::Mounter.with_locale(current_locale) do
+                snippet.template = Locomotive::Mounter::Utils::YAMLFrontMattersTemplate.new(filepath)
+              end
+            end
+
+            items.values.each do |snippet|
+              default_template = snippet.template
+
+              next if default_template.blank?
+
+              runner.mounting_point.locales.map(&:to_sym).each do |locale|
+                next if locale == runner.mounting_point.default_locale
+
+                _template = snippet.template_translations[locale]
+
+                if !_template.is_a?(Exception) && _template.blank?
+                  snippet.template_translations[locale] = default_template
+                end
+              end
+            end
+
+            items
+          end
+
           def for_translations(runner)
+            # Note that we only use the runner to retrieve the path
             path = runner.path
             config_path = File.join(path, 'config', 'translations.yml')
 
@@ -713,20 +787,11 @@ module Locomotive
 
         end # PagesReader
 
-        class SnippetsReader
 
-          # Build the list of snippets from the folder on the file system.
-          #
-          # @return [ Array ] The un-ordered list of snippets
-          #
-          def read
-            self.fetch_from_filesystem
-
-            self.set_default_template_for_each_locale
-
-            self.items
-          end
-
+        # ThemeAssetsReader
+        #
+        #
+        class ThemeAssetsReader
           attr_accessor :runner, :items
 
           delegate :default_locale, :locales, to: :mounting_point
@@ -739,160 +804,14 @@ module Locomotive
           def mounting_point
             self.runner.mounting_point
           end
-
-          protected
-
-          # Return the locale of a file based on its extension.
-          #
-          # Ex:
-          #   about_us/john_doe.fr.liquid.haml => 'fr'
-          #   about_us/john_doe.liquid.haml => 'en' (default locale)
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
-          #
-          def filepath_locale(filepath)
-            locale = File.basename(filepath).split('.')[1]
-
-            if locale.nil?
-              # no locale, use the default one
-              self.default_locale
-            elsif self.locales.include?(locale)
-              # the locale is registered
-              locale
-            elsif locale.size == 2
-              # unregistered locale
-              nil
-            else
-              self.default_locale
-            end
-          end
-
-          # Open a YAML file and returns the content of the file
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] The content of the file
-          #
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
-          end
-
-          # Record snippets found in file system
-          def fetch_from_filesystem
-            Dir.glob(File.join(self.root_dir, "*.{#{Locomotive::Mounter::TEMPLATE_EXTENSIONS.join(',')}}")).each do |filepath|
-              fullpath = File.basename(filepath)
-
-              snippet = self.add(filepath)
-
-              Locomotive::Mounter.with_locale(self.filepath_locale(filepath)) do
-                snippet.template = self.fetch_template(filepath)
-              end
-            end
-          end
-
-          # Set a default template (coming from the default locale)
-          # for each snippet which does not have a translated version
-          # of the template in each locale.
-          #
-          def set_default_template_for_each_locale
-            self.items.values.each do |snippet|
-              default_template = snippet.template
-
-              next if default_template.blank?
-
-              self.locales.map(&:to_sym).each do |locale|
-                next if locale == self.default_locale
-
-                _template = snippet.template_translations[locale]
-
-                if !_template.is_a?(Exception) && _template.blank?
-                  snippet.template_translations[locale] = default_template
-                end
-              end
-            end
-          end
-
-          # Return the directory where all the templates of
-          # snippets are stored in the filesystem.
-          #
-          # @return [ String ] The snippets directory
-          #
-          def root_dir
-            File.join(self.runner.path, 'app', 'views', 'snippets')
-          end
-
-          # Add a new snippet in the global hash of snippets.
-          # If the snippet exists, it returns it.
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] A newly created snippet or the existing one
-          #
-          def add(filepath)
-            slug = self.filepath_to_slug(filepath)
-
-            unless self.items.key?(slug)
-              self.items[slug] = Locomotive::Mounter::Models::Snippet.new({
-                name:     slug.humanize,
-                slug:     slug,
-                template: self.fetch_template(filepath)
-              })
-            end
-
-            self.items[slug]
-          end
-
-          # Convert a filepath to a slug
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ String ] The slug
-          #
-          def filepath_to_slug(filepath)
-            File.basename(filepath).split('.').first.permalink
-          end
-
-          # From a filepath, parse the template inside.
-          # and return the related Tilt instance.
-          # It may return the exception if the template is invalid
-          # (only for HAML templates).
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] The Tilt template or the exception itself if the template is invalid
-          #
-          def fetch_template(filepath)
-            Locomotive::Mounter::Utils::YAMLFrontMattersTemplate.new(filepath)
-          end
-
-        end # SnippetsReader
-
-        # ThemeAssetsReader
-        #
-        #
-        class ThemeAssetsReader
 
           # Build the list of theme assets from the public folder with eager loading.
           #
           # @return [ Array ] The cached list of theme assets
           #
           def read
-            ThemeAssetsArray.new(self.root_dir)
-          end
-
-          attr_accessor :runner, :items
-
-          delegate :default_locale, :locales, to: :mounting_point
-
-          def initialize(runner)
-            self.runner  = runner
-            self.items   = {}
-          end
-
-          def mounting_point
-            self.runner.mounting_point
+            root_dir = File.join(self.runner.path, 'public')
+            ThemeAssetsArray.new(root_dir)
           end
 
           protected
@@ -932,15 +851,6 @@ module Locomotive
           #
           def read_yaml(filepath)
             YAML::load(File.open(filepath).read.force_encoding('utf-8'))
-          end
-
-          # Return the directory where all the theme assets
-          # are stored in the filesystem.
-          #
-          # @return [ String ] The theme assets directory
-          #
-          def root_dir
-            File.join(self.runner.path, 'public')
           end
         end
 
@@ -993,6 +903,21 @@ module Locomotive
             self.list.send(name.to_sym, *args, &block)
           end
         end # ThemeAssetsArray
+
+        class SnippetsReader
+          include Readable
+
+          attr_accessor :runner, :items
+
+          def initialize(runner)
+            @runner  = runner
+            @items   = {}
+          end
+
+          def accept(ask)
+            ask.for_snippets(@runner, @items)
+          end
+        end # SnippetsReader
 
         class SiteReader
           include Readable
