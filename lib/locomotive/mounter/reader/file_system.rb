@@ -15,6 +15,16 @@ module Locomotive
 
         class Runner
           attr_accessor :path
+          attr_accessor :kind, :parameters, :mounting_point
+
+          def initialize(kind)
+            self.kind = kind
+
+             # avoid to load all the ruby files at the startup, only when we need it
+             # base_dir = File.join(File.dirname(__FILE__), kind.to_s)
+             # require File.join(base_dir, 'base.rb') # This is a hinderance right now
+             # Dir[File.join(base_dir, '*.rb')].each { |lib| require lib } # So is this
+          end
 
           # Compass is required
           def prepare
@@ -36,17 +46,6 @@ module Locomotive
             [SiteReader, ContentTypesReader, PagesReader, SnippetsReader, ContentEntriesReader, ContentAssetsReader, ThemeAssetsReader, TranslationsReader]
           end
 
-          attr_accessor :kind, :parameters, :mounting_point
-
-          def initialize(kind)
-            self.kind = kind
-
-             # avoid to load all the ruby files at the startup, only when we need it
-             # base_dir = File.join(File.dirname(__FILE__), kind.to_s)
-             # require File.join(base_dir, 'base.rb') # This is a hinderance right now
-             # Dir[File.join(base_dir, '*.rb')].each { |lib| require lib } # So is this
-          end
-
           # Read the content of a site (pages, snippets, ...etc) and create the corresponding mounting point.
           #
           # @param [ Hash ] parameters The parameters.
@@ -55,9 +54,7 @@ module Locomotive
           #
           def run!(parameters = {})
             self.parameters = parameters.symbolize_keys
-
             self.prepare
-
             self.build_mounting_point
           end
 
@@ -320,56 +317,7 @@ module Locomotive
           #
           def read
             self.items = {} # prefer an array over a hash
-
-            self.fetch_from_pages
-
-            self.fetch_from_content_entries
-
-            self.items
-          end
-
-          protected
-
-          # Return the locale of a file based on its extension.
-          #
-          # Ex:
-          #   about_us/john_doe.fr.liquid.haml => 'fr'
-          #   about_us/john_doe.liquid.haml => 'en' (default locale)
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ String ] The locale (ex: fr, en, ...etc) or nil if it has no information about the locale
-          #
-          def filepath_locale(filepath)
-            locale = File.basename(filepath).split('.')[1]
-
-            if locale.nil?
-              # no locale, use the default one
-              self.default_locale
-            elsif self.locales.include?(locale)
-              # the locale is registered
-              locale
-            elsif locale.size == 2
-              # unregistered locale
-              nil
-            else
-              self.default_locale
-            end
-          end
-
-          # Open a YAML file and returns the content of the file
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] The content of the file
-          #
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
-          end
-
-          # Fetch the files from the template of all the pages
-          #
-          def fetch_from_pages
+            # Formerly, fetch_from_pages
             self.mounting_point.pages.values.each do |page|
               page.translated_in.each do |locale|
                 Locomotive::Mounter.with_locale(locale) do
@@ -379,11 +327,7 @@ module Locomotive
                 end
               end
             end
-          end
-
-          # Fetch the files from the content entries
-          #
-          def fetch_from_content_entries
+            # formerly, fetch_from_content_entries
             self.mounting_point.content_entries.values.each do |content_entry|
               content_entry.translated_in.each do |locale|
                 Locomotive::Mounter.with_locale(locale) do
@@ -401,7 +345,10 @@ module Locomotive
                 end
               end
             end
+            self.items
           end
+
+          protected
 
           # Parse the string passed in parameter in order to
           # look for content assets. If found, then add them.
@@ -409,22 +356,19 @@ module Locomotive
           # @param [ String ] source The string to parse
           #
           def add_assets_from_string(source)
+            # Return the directory where all the theme assets
+            # are stored in the filesystem.
+            #
+            # @return [ String ] The theme assets directory
+            #
+            root_dir = File.join(self.runner.path, 'public')
             return if source.blank?
 
             source.to_s.match(/\/samples\/.*\.[a-zA-Z0-9]+/) do |match|
-              filepath  = File.join(self.root_dir, match.to_s)
+              filepath  = File.join(root_dir, match.to_s)
               folder    = File.dirname(match.to_s)
               self.items[source] = Locomotive::Mounter::Models::ContentAsset.new(filepath: filepath, folder: folder)
             end
-          end
-
-          # Return the directory where all the theme assets
-          # are stored in the filesystem.
-          #
-          # @return [ String ] The theme assets directory
-          #
-          def root_dir
-            File.join(self.runner.path, 'public')
           end
         end # ContentAssetsReader
 
