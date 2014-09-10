@@ -1,9 +1,7 @@
 module Locomotive
   module Mounter
     module Models
-
       class Base
-
         include Locomotive::Mounter::Fields
 
         attr_accessor :_id, :mounting_point, :created_at, :updated_at
@@ -17,7 +15,7 @@ module Locomotive
         end
 
         def persisted?
-        	!self._id.blank?
+          !self._id.blank?
         end
 
         protected
@@ -34,9 +32,7 @@ module Locomotive
             !fields.include?(k.to_s) || (!v.is_a?(FalseClass) && v.blank?)
           end.deep_symbolize_keys
         end
-
       end
-
     end
   end
 end

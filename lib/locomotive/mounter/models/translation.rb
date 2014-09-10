@@ -1,7 +1,6 @@
 module Locomotive
   module Mounter
     module Models
-
       class Translation < Base
 
         ## fields ##
@@ -21,7 +20,6 @@ module Locomotive
         def to_s
           "Translation {#{self.key}: #{self.values}}"
         end
-
       end
     end
   end

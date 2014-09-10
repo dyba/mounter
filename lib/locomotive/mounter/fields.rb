@@ -242,9 +242,7 @@ module Locomotive
             EOV
           end
         end
-
       end
-
     end
   end
 end

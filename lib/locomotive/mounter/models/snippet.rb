@@ -1,9 +1,7 @@
 module Locomotive
   module Mounter
     module Models
-
       class Snippet < Base
-
         ## fields ##
         field :name
         field :slug
@@ -47,9 +45,7 @@ module Locomotive
         def to_s
           self.name
         end
-
       end
-
     end
   end
 end

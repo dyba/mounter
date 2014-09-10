@@ -1,7 +1,6 @@
 module Locomotive
   module Mounter
     module Models
-
       class Site < Base
 
         ## fields ##
@@ -20,9 +19,7 @@ module Locomotive
         def to_s
           self.name
         end
-
       end
-
     end
   end
 end
