@@ -59,6 +59,9 @@ require 'locomotive/mounter/reader/api'
 require 'locomotive/mounter/writer/file_system'
 require 'locomotive/mounter/writer/api'
 
+# New IO
+require 'locomotive/mounter/file_system'
+
 module Locomotive
   module Mounter
     TEMPLATE_EXTENSIONS = %w(liquid haml)

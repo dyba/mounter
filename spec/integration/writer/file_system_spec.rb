@@ -26,7 +26,7 @@ RSpec.describe Locomotive::Mounter::Writer::FileSystem do
     before(:all)  { setup 'reader_api_setup' }
     after(:all)   { teardown }
 
-    it { should_not be_nil }
+    it { pending; should_not be_nil }
 
   end
 end

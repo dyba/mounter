@@ -743,14 +743,49 @@ module Locomotive
 
         end
 
+        require 'singleton'
+
+        class Writer
+          include Singleton
+
+          def for_translations(runner, mounting_point)
+            content = mounting_point.translations.each_with_object({}) do |(key,translation), hash|
+              hash[key] = translation.values
+            end
+
+            content = content.empty? ? '' : content.to_yaml
+
+            target_path = runner.target_path
+
+            path = 'config/translations.yml'
+            mode = 'w'
+            block = ->(file) { file.write content }
+            fullpath = File.join(target_path, path)
+            unless File.exists?(fullpath)
+              FileUtils.mkdir_p(fullpath)
+            end
+
+            fullpath = File.join(target_path, path)
+
+            File.open(fullpath, mode, &block)
+          end
+        end
+
+        module Writable
+          def write
+            accept(Writer.instance)
+          end
+        end
+
         class TranslationsWriter
           include Locomotive::Mounter::Utils::Output
+          include Writable
 
           attr_accessor :mounting_point, :runner
 
           def initialize(mounting_point, runner)
-            self.mounting_point = mounting_point
-            self.runner         = runner
+            @mounting_point = mounting_point
+            @runner         = runner
           end
 
           def prepare
@@ -759,53 +794,16 @@ module Locomotive
             #=============================================================================
             # FILE UTILITY RESPONSIBILITY
             #=============================================================================
-            self.create_folder 'config'
-          end
-
-          def write
-            content = self.mounting_point.translations.each_with_object({}) do |(key,translation), hash|
-              hash[key] = translation.values
-            end
-
-            content = content.empty? ? '' : content.to_yaml
-
-            self.open_file('config/translations.yml') do |file|
-              file.write content
-            end
-          end
-
-          #=============================================================================
-          # FILE UTILITY RESPONSIBILITY
-          #=============================================================================
-          #
-          # Helper method to create a folder from a relative path
-          #
-          # @param [ String ] path The relative path
-          #
-          def create_folder(path)
-            fullpath = File.join(self.target_path, path)
+            path = 'config'
+            target_path = @runner.target_path
+            fullpath = File.join(target_path, path)
             unless File.exists?(fullpath)
               FileUtils.mkdir_p(fullpath)
             end
           end
 
-          # Open a file described by the relative path. The file will be closed after the execution of the block.
-          #
-          # @param [ String ] path The relative path
-          # @param [ String ] mode The file mode ('w' by default)
-          # @param [ Lambda ] &block The block passed to the File.open method
-          #
-          def open_file(path, mode = 'w', &block)
-            # make sure the target folder exists
-            self.create_folder(File.dirname(path))
-
-            fullpath = File.join(self.target_path, path)
-
-            File.open(fullpath, mode, &block)
-          end
-
-          def target_path
-            self.runner.target_path
+          def accept(ask)
+            ask.for_translations(@runner, @mounting_point)
           end
 
           protected
