@@ -181,6 +181,89 @@ module Locomotive
             items
           end
 
+          def for_content_assets(runner, items)
+            items = {} # prefer an array over a hash
+            # Formerly, fetch_from_pages
+            runner.mounting_point.pages.values.each do |page|
+              page.translated_in.each do |locale|
+                Locomotive::Mounter.with_locale(locale) do
+                  unless page.template.blank?
+
+                    # Formerly, add_assets_from_string(source)
+                    #
+                    # Parse the string passed in parameter in order to
+                    # look for content assets. If found, then add them.
+                    #
+                    # @param [ String ] source The string to parse
+                    #
+                    source = page.template.raw_source
+                    # Return the directory where all the theme assets
+                    # are stored in the filesystem.
+                    #
+                    # @return [ String ] The theme assets directory
+                    #
+                    root_dir = File.join(runner.path, 'public')
+                    return if source.blank?
+
+                    source.to_s.match(/\/samples\/.*\.[a-zA-Z0-9]+/) do |match|
+                      filepath  = File.join(root_dir, match.to_s)
+                      folder    = File.dirname(match.to_s)
+                      items[source] = Locomotive::Mounter::Models::ContentAsset.new(filepath: filepath, folder: folder)
+                    end
+
+                  end
+                end
+              end
+            end
+            # formerly, fetch_from_content_entries
+            runner.mounting_point.content_entries.values.each do |content_entry|
+              content_entry.translated_in.each do |locale|
+                Locomotive::Mounter.with_locale(locale) do
+                  # get the string, text, file fields...
+                  content_entry.content_type.fields.each do |field|
+                    value = content_entry.dynamic_getter(field.name)
+
+                    case field.type.to_sym
+                    when :string, :text
+                      source = value
+                      # Return the directory where all the theme assets
+                      # are stored in the filesystem.
+                      #
+                      # @return [ String ] The theme assets directory
+                      #
+                      root_dir = File.join(self.runner.path, 'public')
+                      return if source.blank?
+
+                      source.to_s.match(/\/samples\/.*\.[a-zA-Z0-9]+/) do |match|
+                        filepath  = File.join(root_dir, match.to_s)
+                        folder    = File.dirname(match.to_s)
+                        items[source] = Locomotive::Mounter::Models::ContentAsset.new(filepath: filepath, folder: folder)
+                      end
+                    when :file
+                      if value
+                        source = value['url']
+                        # Return the directory where all the theme assets
+                        # are stored in the filesystem.
+                        #
+                        # @return [ String ] The theme assets directory
+                        #
+                        root_dir = File.join(self.runner.path, 'public')
+                        return if source.blank?
+
+                        source.to_s.match(/\/samples\/.*\.[a-zA-Z0-9]+/) do |match|
+                          filepath  = File.join(root_dir, match.to_s)
+                          folder    = File.dirname(match.to_s)
+                          items[source] = Locomotive::Mounter::Models::ContentAsset.new(filepath: filepath, folder: folder)
+                        end
+                      end
+                    end
+                  end
+                end
+              end
+            end
+            items
+          end
+
           def for_site(runner)
             # We only use the runner to retrieve the path
             path = runner.path
@@ -298,77 +381,23 @@ module Locomotive
         end
 
         class ContentAssetsReader
+          include Readable
+
           attr_accessor :runner, :items
 
           delegate :default_locale, :locales, to: :mounting_point
 
           def initialize(runner)
-            self.runner  = runner
-            self.items   = {}
+            @runner  = runner
+            @items   = {}
           end
 
           def mounting_point
-            self.runner.mounting_point
+            @runner.mounting_point
           end
 
-          # Build the list of contents assets
-          #
-          # @return [ Array ] The list of content assets
-          #
-          def read
-            self.items = {} # prefer an array over a hash
-            # Formerly, fetch_from_pages
-            self.mounting_point.pages.values.each do |page|
-              page.translated_in.each do |locale|
-                Locomotive::Mounter.with_locale(locale) do
-                  unless page.template.blank?
-                    self.add_assets_from_string(page.template.raw_source)
-                  end
-                end
-              end
-            end
-            # formerly, fetch_from_content_entries
-            self.mounting_point.content_entries.values.each do |content_entry|
-              content_entry.translated_in.each do |locale|
-                Locomotive::Mounter.with_locale(locale) do
-                  # get the string, text, file fields...
-                  content_entry.content_type.fields.each do |field|
-                    value = content_entry.dynamic_getter(field.name)
-
-                    case field.type.to_sym
-                    when :string, :text
-                      self.add_assets_from_string(value)
-                    when :file
-                      self.add_assets_from_string(value['url']) if value
-                    end
-                  end
-                end
-              end
-            end
-            self.items
-          end
-
-          protected
-
-          # Parse the string passed in parameter in order to
-          # look for content assets. If found, then add them.
-          #
-          # @param [ String ] source The string to parse
-          #
-          def add_assets_from_string(source)
-            # Return the directory where all the theme assets
-            # are stored in the filesystem.
-            #
-            # @return [ String ] The theme assets directory
-            #
-            root_dir = File.join(self.runner.path, 'public')
-            return if source.blank?
-
-            source.to_s.match(/\/samples\/.*\.[a-zA-Z0-9]+/) do |match|
-              filepath  = File.join(root_dir, match.to_s)
-              folder    = File.dirname(match.to_s)
-              self.items[source] = Locomotive::Mounter::Models::ContentAsset.new(filepath: filepath, folder: folder)
-            end
+          def accept(ask)
+            ask.for_content_assets(@runner, @items)
           end
         end # ContentAssetsReader
 
@@ -390,29 +419,9 @@ module Locomotive
           # @return [ Array ] The un-ordered list of content types
           #
           def read
-            self.fetch_from_filesystem
-            self.items
-          end
-
-          def mounting_point
-            self.runner.mounting_point
-          end
-
-          protected
-
-          # Open a YAML file and returns the content of the file
-          #
-          # @param [ String ] filepath The path to the file
-          #
-          # @return [ Object ] The content of the file
-          #
-          def read_yaml(filepath)
-            YAML::load(File.open(filepath).read.force_encoding('utf-8'))
-          end
-
-          def fetch_from_filesystem
-            Dir.glob(File.join(self.root_dir, '*.yml')).each do |filepath|
-              attributes = self.read_yaml(filepath)
+            root_dir = File.join(self.runner.path, 'data')
+            Dir.glob(File.join(root_dir, '*.yml')).each do |filepath|
+              attributes = YAML::load(File.open(filepath).read.force_encoding('utf-8'))
 
               content_type = self.get_content_type(File.basename(filepath, '.yml'))
 
@@ -422,7 +431,14 @@ module Locomotive
                 self.add(content_type, _attributes, index)
               end unless attributes == false
             end
+            self.items
           end
+
+          def mounting_point
+            self.runner.mounting_point
+          end
+
+          protected
 
           # Get the content type identified by the slug from the mounting point.
           # Raise an UnknownContentTypeException exception if such a content type
@@ -472,16 +488,6 @@ module Locomotive
 
             self.items[key] = entry
           end
-
-          # Return the directory where all the entries
-          # of the content types are stored.
-          #
-          # @return [ String ] The content entries root directory
-          #
-          def root_dir
-            File.join(self.runner.path, 'data')
-          end
-
         end # ContentEntriesReader
 
         class PagesReader
@@ -869,7 +875,7 @@ module Locomotive
           attr_accessor :runner
 
           def initialize(runner)
-            self.runner  = runner
+            @runner  = runner
           end
 
           def accept(ask)
@@ -893,7 +899,7 @@ module Locomotive
           end
 
           def mounting_point
-            self.runner.mounting_point
+            @runner.mounting_point
           end
 
           def accept(ask)

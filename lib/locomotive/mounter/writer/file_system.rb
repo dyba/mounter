@@ -148,6 +148,13 @@ module Locomotive
         class ContentAssetsWriter
           include Locomotive::Mounter::Utils::Output
 
+          attr_accessor :mounting_point, :runner
+
+          def initialize(mounting_point, runner)
+            @mounting_point = mounting_point
+            @runner         = runner
+          end
+
           # It creates the content assets folder
           def prepare
             self.output_title(:writing)
@@ -156,7 +163,7 @@ module Locomotive
 
           # It writes all the content assets into files
           def write
-            self.mounting_point.content_assets.each do |_, asset|
+            @mounting_point.content_assets.each do |_, asset|
               self.output_resource_op asset
 
               self.open_file(self.target_asset_path(asset), 'wb') do |file|
@@ -167,12 +174,6 @@ module Locomotive
             end
           end
 
-          attr_accessor :mounting_point, :runner
-
-          def initialize(mounting_point, runner)
-            self.mounting_point = mounting_point
-            self.runner         = runner
-          end
 
           # Helper method to create a folder from a relative path
           #
@@ -201,7 +202,7 @@ module Locomotive
           end
 
           def target_path
-            self.runner.target_path
+            @runner.target_path
           end
 
           protected
@@ -213,8 +214,7 @@ module Locomotive
           def target_asset_path(asset)
             File.join('public', asset.folder, asset.filename)
           end
-
-        end # CententAssetsWriter
+        end # ContentAssetsWriter
 
         class ContentEntriesWriter < Base
 
