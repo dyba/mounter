@@ -380,27 +380,6 @@ module Locomotive
           end
         end
 
-        class ContentAssetsReader
-          include Readable
-
-          attr_accessor :runner, :items
-
-          delegate :default_locale, :locales, to: :mounting_point
-
-          def initialize(runner)
-            @runner  = runner
-            @items   = {}
-          end
-
-          def mounting_point
-            @runner.mounting_point
-          end
-
-          def accept(ask)
-            ask.for_content_assets(@runner, @items)
-          end
-        end # ContentAssetsReader
-
         # ContentEntriesReader
         #
         #
@@ -882,6 +861,24 @@ module Locomotive
             ask.for_site(@runner)
           end
         end # SiteReader
+
+        # ContentAssetsReader
+        #
+        #
+        class ContentAssetsReader
+          include Readable
+
+          attr_accessor :runner, :items
+
+          def initialize(runner)
+            @runner  = runner
+            @items   = {}
+          end
+
+          def accept(ask)
+            ask.for_content_assets(@runner, @items)
+          end
+        end # ContentAssetsReader
 
         # ContentTypesReader
         #
