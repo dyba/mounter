@@ -3,16 +3,18 @@ require 'spec_helper'
 module Locomotive::Mounter
   RSpec.describe FileSystem do
     let(:file_system) { double("file_system") }
-    let(:src) { double("dir") }
+    let(:src) { File.expand_path(File.join(File.dirname(__FILE__), '..', 'fixtures', 'default')) }
 
     it "reads all translations" do
       translations = FileSystem.read(src, :translations)
 
-      expected = { "en" => "Hello", "fr" => "Salut" }
-      expect(translations).to eq expected
+      expected = { key: "powered_by", values: { "en" => "Powered by", "fr" => "Propulsé par" } }
+      expect(translations["powered_by"].to_params).to eq expected
     end
 
     it "reads specific translations" do
+      pending "Need to be able to filter translations"
+
       translations = FileSystem.read(src, :translations, filter: "e*")
 
       expected = { "en" => "Hello" }
@@ -32,6 +34,8 @@ module Locomotive::Mounter
     end
 
     it "reads specific translations" do
+      pending "Need to be able to filter translations"
+
       translations = RemoteSite.read(src, :translations)
 
       expected = { "en" => "Hello" }
